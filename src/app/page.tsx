@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { Flame, Sun, Moon, Sparkles, Volume2, VolumeX } from "lucide-react";
 import { useStreak } from "@/hooks/useStreak";
 import { ProgressBar } from "@/components/progress-bar";
-import { NewsCard } from "@/components/news-card";
+import { NewsCard, NewsItem } from "@/components/news-card";
 import { EndOfFeed } from "@/components/end-of-feed";
 import { FloatingParticles } from "@/components/floating-particles";
 
@@ -57,6 +57,9 @@ const CATEGORY_GRADIENTS = {
   5: "from-yellow-500/10 via-amber-500/5 to-slate-900/10 dark:from-yellow-950/20 dark:via-amber-950/10 dark:to-slate-950",
 } as const;
 
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://btyfqihnriqlobxcbvno.supabase.co";
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ0eWZxaWhucmlxbG9ieGNidm5vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1MjA4MDcsImV4cCI6MjA5NDA5NjgwN30.P5b8vV_roeN0PsCJpGwua8XyPrK2T8DlsKGSvALI_5U";
+
 export default function Home() {
   const { streak, isMounted } = useStreak();
   const { theme, setTheme, resolvedTheme } = useTheme();
@@ -66,6 +69,7 @@ export default function Home() {
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [reactions, setReactions] = useState<{ [newsId: string]: number }>({});
   const [userReactions, setUserReactions] = useState<string[]>([]);
+  const [newsList, setNewsList] = useState<NewsItem[]>(MOCK_NEWS);
 
   const [audio] = useState(() => {
     if (typeof Audio !== "undefined") {
@@ -104,10 +108,10 @@ export default function Home() {
     // Fetch initial reactions count from Supabase
     const loadReactions = async () => {
       try {
-        const res = await fetch("https://btyfqihnriqlobxcbvno.supabase.co/rest/v1/lumina_reactions?select=news_id,count", {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/lumina_reactions?select=news_id,count`, {
           headers: {
-            apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ0eWZxaWhucmlxbG9ieGNidm5vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1MjA4MDcsImV4cCI6MjA5NDA5NjgwN30.P5b8vV_roeN0PsCJpGwua8XyPrK2T8DlsKGSvALI_5U",
-            Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ0eWZxaWhucmlxbG9ieGNidm5vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1MjA4MDcsImV4cCI6MjA5NDA5NjgwN30.P5b8vV_roeN0PsCJpGwua8XyPrK2T8DlsKGSvALI_5U",
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
           },
         });
         if (res.ok) {
@@ -122,7 +126,42 @@ export default function Home() {
         console.error("Error loading reactions:", err);
       }
     };
+
+    // Fetch initial daily news list from Supabase
+    const loadNews = async () => {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/lumina_news?select=id,category,title,summary,source_url&order=id.asc`, {
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.length > 0) {
+            const mappedData: NewsItem[] = data.map((item: {
+              id: string;
+              category: string;
+              title: string;
+              summary: string;
+              source_url: string;
+            }) => ({
+              id: item.id,
+              category: item.category,
+              title: item.title,
+              summary: item.summary,
+              sourceUrl: item.source_url,
+            }));
+            setNewsList(mappedData);
+          }
+        }
+      } catch (err) {
+        console.error("Error loading news from Supabase:", err);
+      }
+    };
+
     loadReactions();
+    loadNews();
   }, []);
 
   useEffect(() => {
@@ -203,11 +242,11 @@ export default function Home() {
 
     const endpoint = hasReacted ? "decrement_lumina_reaction" : "increment_lumina_reaction";
     try {
-      const res = await fetch(`https://btyfqihnriqlobxcbvno.supabase.co/rest/v1/rpc/${endpoint}`, {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${endpoint}`, {
         method: "POST",
         headers: {
-          apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ0eWZxaWhucmlxbG9ieGNidm5vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1MjA4MDcsImV4cCI6MjA5NDA5NjgwN30.P5b8vV_roeN0PsCJpGwua8XyPrK2T8DlsKGSvALI_5U",
-          Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ0eWZxaWhucmlxbG9ieGNidm5vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1MjA4MDcsImV4cCI6MjA5NDA5NjgwN30.P5b8vV_roeN0PsCJpGwua8XyPrK2T8DlsKGSvALI_5U",
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ news_id_param: newsId }),
@@ -300,12 +339,12 @@ export default function Home() {
 
       {/* Contenedor Feed Snapping */}
       <main className="w-full h-full overflow-y-scroll snap-y snap-mandatory scroll-smooth focus:outline-none scrollbar-none">
-        {MOCK_NEWS.map((news, index) => (
+        {newsList.map((news, index) => (
           <NewsCard
             key={news.id}
             news={news}
             index={index}
-            total={MOCK_NEWS.length}
+            total={newsList.length}
             reactionsCount={reactions[news.id] || 0}
             hasReacted={userReactions.includes(news.id)}
             onReact={() => handleToggleReaction(news.id)}
