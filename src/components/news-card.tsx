@@ -1,6 +1,7 @@
 "use client";
-import { ExternalLink, Share2, Check } from "lucide-react";
+import { ExternalLink, Share2, Check, Sparkles } from "lucide-react";
 import { useState } from "react";
+
 export interface NewsItem {
   id: string;
   category: string;
@@ -13,12 +14,15 @@ interface NewsCardProps {
   news: NewsItem;
   index: number;
   total: number;
+  reactionsCount: number;
+  hasReacted: boolean;
+  onReact: () => void;
 }
 
-export function NewsCard({ news, index, total }: NewsCardProps) {
+export function NewsCard({ news, index, total, reactionsCount, hasReacted, onReact }: NewsCardProps) {
   const [isCopied, setIsCopied] = useState(false);
   const handleShare = async () => {
-    const text = `✨ Dosis de optimismo de hoy: ${news.title}\n\n${news.summary}\n\n➜ Leído en 5 Noticias Positivas`;
+    const text = `✨ Dosis de optimismo de hoy: ${news.title}\n\n${news.summary}\n\n➜ Leído en Lumina`;
     if (navigator.share) { try { await navigator.share({ title: news.title, text }); return; } catch {} }
     await navigator.clipboard.writeText(text);
     setIsCopied(true); setTimeout(() => setIsCopied(false), 2000);
@@ -32,13 +36,39 @@ export function NewsCard({ news, index, total }: NewsCardProps) {
         </div>
         <h2 className="text-2xl font-bold leading-tight text-[var(--heading)]">{news.title}</h2>
         <p className="text-base leading-relaxed text-[var(--foreground)] opacity-90">{news.summary}</p>
-        <div className="mt-4 pt-6 border-t border-black/5 flex justify-between">
+        <div className="mt-4 pt-6 border-t border-black/5 flex justify-between items-center">
           <a href={news.sourceUrl} target="_blank" className="flex items-center gap-2 text-sm font-semibold hover:text-primary-dark"><ExternalLink className="w-4 h-4"/> Leer original</a>
-          <button onClick={handleShare} className="p-3 rounded-full hover:bg-black/5 relative">
-            {isCopied ? <Check className="w-5 h-5 text-secondary-dark"/> : <Share2 className="w-5 h-5"/>}
-          </button>
+          <div className="flex items-center gap-1">
+            {/* Reacción Lumina (Sparkles) */}
+            <button 
+              onClick={onReact} 
+              className="flex items-center gap-1.5 px-3 py-2 rounded-full hover:bg-black/5 dark:hover:bg-white/5 transition-all cursor-pointer group"
+              aria-label="Reaccionar a la noticia"
+            >
+              <Sparkles 
+                className={`w-5 h-5 transition-all duration-300 ${
+                  hasReacted 
+                    ? "text-primary-DEFAULT fill-primary-DEFAULT drop-shadow-[0_0_8px_#facc15] animate-spark-pop" 
+                    : "text-slate-400 dark:text-slate-600 group-hover:text-slate-500 dark:group-hover:text-slate-400"
+                }`}
+              />
+              <span className={`text-xs font-bold transition-colors ${
+                hasReacted 
+                  ? "text-primary-dark dark:text-primary-light" 
+                  : "text-slate-400 dark:text-slate-500"
+              }`}>
+                {reactionsCount}
+              </span>
+            </button>
+
+            {/* Compartir */}
+            <button onClick={handleShare} className="p-3 rounded-full hover:bg-black/5 dark:hover:bg-white/5 relative cursor-pointer" aria-label="Compartir noticia">
+              {isCopied ? <Check className="w-5 h-5 text-secondary-dark"/> : <Share2 className="w-5 h-5 text-slate-400 dark:text-slate-500 hover:text-[var(--foreground)]"/>}
+            </button>
+          </div>
         </div>
       </div>
     </article>
   );
 }
+

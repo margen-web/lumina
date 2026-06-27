@@ -43,6 +43,20 @@
       transform: rotate(6deg) scale(1.12);
     }
   }
+
+  --animate-spark-pop: spark-pop 0.4s ease-out;
+  @keyframes spark-pop {
+    0% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.4) rotate(15deg);
+      filter: drop-shadow(0 0 12px #facc15);
+    }
+    100% {
+      transform: scale(1.1) rotate(0deg);
+    }
+  }
 }
 @layer base {
   :root { --background: var(--color-background-light); --foreground: var(--color-text-light); --card: var(--color-card-light); --heading: var(--color-text-heading-light); }

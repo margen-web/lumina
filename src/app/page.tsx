@@ -64,6 +64,8 @@ export default function Home() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [audioEnabled, setAudioEnabled] = useState(false);
+  const [reactions, setReactions] = useState<{ [newsId: string]: number }>({});
+  const [userReactions, setUserReactions] = useState<string[]>([]);
 
   const [audio] = useState(() => {
     if (typeof Audio !== "undefined") {
@@ -88,6 +90,39 @@ export default function Home() {
     if (savedAudio === "true") {
       setAudioEnabled(true);
     }
+
+    // Load user reactions from localStorage
+    const savedReactions = localStorage.getItem("lumina_user_reactions");
+    if (savedReactions) {
+      try {
+        setUserReactions(JSON.parse(savedReactions));
+      } catch (e) {
+        console.error("Error parsing user reactions:", e);
+      }
+    }
+
+    // Fetch initial reactions count from Supabase
+    const loadReactions = async () => {
+      try {
+        const res = await fetch("https://btyfqihnriqlobxcbvno.supabase.co/rest/v1/lumina_reactions?select=news_id,count", {
+          headers: {
+            apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ0eWZxaWhucmlxbG9ieGNidm5vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1MjA4MDcsImV4cCI6MjA5NDA5NjgwN30.P5b8vV_roeN0PsCJpGwua8XyPrK2T8DlsKGSvALI_5U",
+            Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ0eWZxaWhucmlxbG9ieGNidm5vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1MjA4MDcsImV4cCI6MjA5NDA5NjgwN30.P5b8vV_roeN0PsCJpGwua8XyPrK2T8DlsKGSvALI_5U",
+          },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const counts: { [newsId: string]: number } = {};
+          data.forEach((row: { news_id: string; count: number }) => {
+            counts[row.news_id] = row.count;
+          });
+          setReactions(counts);
+        }
+      } catch (err) {
+        console.error("Error loading reactions:", err);
+      }
+    };
+    loadReactions();
   }, []);
 
   useEffect(() => {
@@ -142,6 +177,51 @@ export default function Home() {
     const nextState = !audioEnabled;
     setAudioEnabled(nextState);
     localStorage.setItem("audio_enabled", nextState.toString());
+  };
+
+  const handleToggleReaction = async (newsId: string) => {
+    const hasReacted = userReactions.includes(newsId);
+    let updatedUserReactions: string[];
+
+    if (hasReacted) {
+      updatedUserReactions = userReactions.filter((id) => id !== newsId);
+    } else {
+      updatedUserReactions = [...userReactions, newsId];
+    }
+
+    setUserReactions(updatedUserReactions);
+    localStorage.setItem("lumina_user_reactions", JSON.stringify(updatedUserReactions));
+
+    setReactions((prev) => ({
+      ...prev,
+      [newsId]: Math.max(0, (prev[newsId] || 0) + (hasReacted ? -1 : 1)),
+    }));
+
+    if (typeof navigator !== "undefined" && navigator.vibrate) {
+      navigator.vibrate(30);
+    }
+
+    const endpoint = hasReacted ? "decrement_lumina_reaction" : "increment_lumina_reaction";
+    try {
+      const res = await fetch(`https://btyfqihnriqlobxcbvno.supabase.co/rest/v1/rpc/${endpoint}`, {
+        method: "POST",
+        headers: {
+          apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ0eWZxaWhucmlxbG9ieGNidm5vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1MjA4MDcsImV4cCI6MjA5NDA5NjgwN30.P5b8vV_roeN0PsCJpGwua8XyPrK2T8DlsKGSvALI_5U",
+          Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ0eWZxaWhucmlxbG9ieGNidm5vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1MjA4MDcsImV4cCI6MjA5NDA5NjgwN30.P5b8vV_roeN0PsCJpGwua8XyPrK2T8DlsKGSvALI_5U",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ news_id_param: newsId }),
+      });
+      if (res.ok) {
+        const newCount = await res.json();
+        setReactions((prev) => ({
+          ...prev,
+          [newsId]: newCount,
+        }));
+      }
+    } catch (err) {
+      console.error("Failed to sync reaction with database:", err);
+    }
   };
 
   if (!mounted) {
@@ -226,6 +306,9 @@ export default function Home() {
             news={news}
             index={index}
             total={MOCK_NEWS.length}
+            reactionsCount={reactions[news.id] || 0}
+            hasReacted={userReactions.includes(news.id)}
+            onReact={() => handleToggleReaction(news.id)}
           />
         ))}
         <EndOfFeed />
