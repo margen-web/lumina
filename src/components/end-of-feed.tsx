@@ -4,103 +4,17 @@ import confetti from "canvas-confetti";
 import { Smile, Star } from "lucide-react";
 import { useStreak } from "@/hooks/useStreak";
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://btyfqihnriqlobxcbvno.supabase.co";
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ0eWZxaWhucmlxbG9ieGNidm5vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1MjA4MDcsImV4cCI6MjA5NDA5NjgwN30.P5b8vV_roeN0PsCJpGwua8XyPrK2T8DlsKGSvALI_5U";
-
-interface PollData {
-  id: string;
-  question: string;
-  option_a: string;
-  option_b: string;
-  votes_a: number;
-  votes_b: number;
-}
-
 export function EndOfFeed() {
   const { streak, isMounted } = useStreak();
   const [isVisible, setIsVisible] = useState(false);
   const [hasRated, setHasRated] = useState(false);
-  
-  const [poll, setPoll] = useState<PollData | null>(null);
-  const [userVote, setUserVote] = useState<'a' | 'b' | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setHasRated(localStorage.getItem("has_rated") === "true");
     }
-
-    // Fetch daily poll from Supabase
-    const fetchLatestPoll = async () => {
-      try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/lumina_polls?order=id.desc&limit=1`, {
-          headers: {
-            apikey: SUPABASE_ANON_KEY,
-            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.length > 0) {
-            const currentPoll = data[0];
-            setPoll(currentPoll);
-
-            // Load user vote from localStorage
-            const savedVote = localStorage.getItem(`lumina_poll_vote_${currentPoll.id}`);
-            if (savedVote === 'a' || savedVote === 'b') {
-              setUserVote(savedVote);
-            }
-          }
-        }
-      } catch (err) {
-        console.error("Error fetching daily poll:", err);
-      }
-    };
-    fetchLatestPoll();
   }, []);
-
-  const handleVote = async (option: 'a' | 'b') => {
-    if (!poll) return;
-
-    setUserVote(option);
-    localStorage.setItem(`lumina_poll_vote_${poll.id}`, option);
-
-    setPoll((prev) => {
-      if (!prev) return null;
-      return {
-        ...prev,
-        votes_a: option === 'a' ? prev.votes_a + 1 : prev.votes_a,
-        votes_b: option === 'b' ? prev.votes_b + 1 : prev.votes_b,
-      };
-    });
-
-    if (typeof navigator !== "undefined" && navigator.vibrate) {
-      navigator.vibrate(30);
-    }
-
-    try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/vote_lumina_poll`, {
-        method: "POST",
-        headers: {
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          poll_id_param: poll.id,
-          option_param: option,
-        }),
-      });
-      if (res.ok) {
-        const updatedPoll = await res.json();
-        if (updatedPoll) {
-          setPoll(updatedPoll);
-        }
-      }
-    } catch (err) {
-      console.error("Error saving vote:", err);
-    }
-  };
 
   const handleRateApp = () => {
     if (typeof navigator !== "undefined" && navigator.vibrate) {
@@ -180,72 +94,16 @@ export function EndOfFeed() {
     else if (streak >= 3) msg = "¡Llevas varios días seguidos cuidando tu salud mental! Choca esos cinco 🖐️.";
   }
 
-  // Calculate percentages
-  const totalVotes = (poll?.votes_a || 0) + (poll?.votes_b || 0);
-  const percentA = totalVotes > 0 ? Math.round(((poll?.votes_a || 0) / totalVotes) * 100) : 0;
-  const percentB = totalVotes > 0 ? 100 - percentA : 0;
-
   return (
     <article id="end-of-feed" data-index={5} className="w-full h-[100dvh] flex flex-col justify-center items-center p-6 snap-start snap-always relative">
       <div className={`flex flex-col items-center text-center max-w-sm gap-6 p-8 transition-all duration-1000 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
-        <div className="w-20 h-20 bg-primary-light/40 text-primary-dark rounded-full flex items-center justify-center mb-1"><Smile className="w-10 h-10" /></div>
+        <div className="w-24 h-24 bg-primary-light/40 text-primary-dark rounded-full flex items-center justify-center mb-2"><Smile className="w-12 h-12" /></div>
         <h2 className="text-3xl font-bold text-[var(--heading)]">Ya estás al día.</h2>
-        <p className="text-base font-semibold opacity-90">{msg}</p>
+        <p className="text-lg font-medium">{msg}</p>
         
-        {/* Encuesta Zen Diaria */}
-        {poll && (
-          <div className="w-full p-6 bg-[var(--card)] rounded-[2.5rem] border border-black/5 dark:border-white/5 shadow-md flex flex-col gap-4 text-center items-center">
-            <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-primary-light/40 dark:bg-primary-dark/20 text-primary-dark dark:text-primary-light tracking-wider uppercase">Encuesta del día</span>
-            <p className="text-xs font-bold leading-snug text-[var(--heading)] px-2">{poll.question}</p>
-            
-            {!userVote ? (
-              <div className="flex gap-2 w-full mt-2">
-                <button
-                  onClick={() => handleVote('a')}
-                  className="flex-1 py-3 rounded-full border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 font-bold text-xs transition-all transform active:scale-95 cursor-pointer text-[var(--foreground)]"
-                >
-                  {poll.option_a}
-                </button>
-                <button
-                  onClick={() => handleVote('b')}
-                  className="flex-1 py-3 rounded-full border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 font-bold text-xs transition-all transform active:scale-95 cursor-pointer text-[var(--foreground)]"
-                >
-                  {poll.option_b}
-                </button>
-              </div>
-            ) : (
-              <div className="w-full flex flex-col gap-3 mt-1 text-left">
-                {/* Opción A */}
-                <div className="relative w-full h-10 rounded-full bg-slate-100 dark:bg-slate-900 border border-black/5 dark:border-white/5 overflow-hidden flex items-center px-4 justify-between">
-                  <div 
-                    className="absolute left-0 top-0 bottom-0 bg-primary-DEFAULT/25 dark:bg-primary-DEFAULT/20 transition-all duration-1000" 
-                    style={{ width: `${percentA}%` }}
-                  />
-                  <span className="text-xs font-bold z-10 flex items-center gap-1.5 text-[var(--foreground)]">
-                    {poll.option_a} {userVote === 'a' && <span className="text-[9px] bg-primary-DEFAULT/40 px-1.5 py-0.5 rounded-full text-primary-dark font-extrabold">Tu voto</span>}
-                  </span>
-                  <span className="text-xs font-extrabold z-10 text-[var(--heading)]">{percentA}%</span>
-                </div>
-
-                {/* Opción B */}
-                <div className="relative w-full h-10 rounded-full bg-slate-100 dark:bg-slate-900 border border-black/5 dark:border-white/5 overflow-hidden flex items-center px-4 justify-between">
-                  <div 
-                    className="absolute left-0 top-0 bottom-0 bg-primary-DEFAULT/25 dark:bg-primary-DEFAULT/20 transition-all duration-1000" 
-                    style={{ width: `${percentB}%` }}
-                  />
-                  <span className="text-xs font-bold z-10 flex items-center gap-1.5 text-[var(--foreground)]">
-                    {poll.option_b} {userVote === 'b' && <span className="text-[9px] bg-primary-DEFAULT/40 px-1.5 py-0.5 rounded-full text-primary-dark font-extrabold">Tu voto</span>}
-                  </span>
-                  <span className="text-xs font-extrabold z-10 text-[var(--heading)]">{percentB}%</span>
-                </div>
-
-                <span className="text-[10px] text-slate-400 dark:text-slate-500 text-center mt-1 font-semibold">
-                  {totalVotes} {totalVotes === 1 ? 'voto total' : 'votos totales'}
-                </span>
-              </div>
-            )}
-          </div>
-        )}
+        <div className="p-5 bg-[var(--card)] rounded-2xl border border-black/5 dark:border-white/5 shadow-sm w-full">
+          <p className="text-sm font-semibold opacity-95">No hay más ruido por hoy. Apaga la pantalla y que tengas un gran día. ✨</p>
+        </div>
 
         {/* Banner para calificar la aplicación (se muestra a partir del día 3 si no ha calificado) */}
         {isMounted && streak >= 3 && !hasRated && (
