@@ -1,6 +1,7 @@
 "use client";
 import { ExternalLink, Share2, Check, Sparkles } from "lucide-react";
 import { useState } from "react";
+import { logLuminaEvent } from "@/lib/analytics";
 
 export interface NewsItem {
   id: string;
@@ -22,6 +23,7 @@ interface NewsCardProps {
 export function NewsCard({ news, index, total, reactionsCount, hasReacted, onReact }: NewsCardProps) {
   const [isCopied, setIsCopied] = useState(false);
   const handleShare = async () => {
+    logLuminaEvent("news_share", news.id);
     const text = `✨ Dosis de optimismo de hoy: ${news.title}\n\n${news.summary}\n\n➜ Leído en Lumina`;
     if (navigator.share) { try { await navigator.share({ title: news.title, text }); return; } catch {} }
     await navigator.clipboard.writeText(text);

@@ -1,13 +1,15 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import confetti from "canvas-confetti";
 import { Smile, Star } from "lucide-react";
 import { useStreak } from "@/hooks/useStreak";
+import { logLuminaEvent } from "@/lib/analytics";
 
 export function EndOfFeed() {
   const { streak, isMounted } = useStreak();
   const [isVisible, setIsVisible] = useState(false);
   const [hasRated, setHasRated] = useState(false);
+  const hasLoggedComplete = useRef(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -39,6 +41,10 @@ export function EndOfFeed() {
     const observer = new IntersectionObserver((entries) => {
       if (entries[0].isIntersecting) {
         setIsVisible(true);
+        if (!hasLoggedComplete.current) {
+          hasLoggedComplete.current = true;
+          logLuminaEvent("feed_complete");
+        }
         if (isMounted) {
           const duration = 2.5 * 1000;
           const animationEnd = Date.now() + duration;

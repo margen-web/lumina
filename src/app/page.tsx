@@ -8,6 +8,7 @@ import { ProgressBar } from "@/components/progress-bar";
 import { NewsCard, NewsItem } from "@/components/news-card";
 import { EndOfFeed } from "@/components/end-of-feed";
 import { FloatingParticles } from "@/components/floating-particles";
+import { logLuminaEvent } from "@/lib/analytics";
 
 // 5 Noticias Positivas Reales Mockeadas
 const MOCK_NEWS = [
@@ -70,6 +71,7 @@ export default function Home() {
   const [reactions, setReactions] = useState<{ [newsId: string]: number }>({});
   const [userReactions, setUserReactions] = useState<string[]>([]);
   const [newsList, setNewsList] = useState<NewsItem[]>(MOCK_NEWS);
+  const [viewedCards, setViewedCards] = useState<string[]>([]);
 
   const [audio] = useState(() => {
     if (typeof Audio !== "undefined") {
@@ -84,6 +86,7 @@ export default function Home() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
+    logLuminaEvent("page_view");
 
     const hasSeen = localStorage.getItem("has_seen_onboarding");
     if (!hasSeen) {
@@ -208,6 +211,18 @@ export default function Home() {
       navigator.vibrate(15);
     }
   }, [activeIndex]);
+
+  // Registrar evento de noticia vista de forma única por sesión
+  useEffect(() => {
+    if (newsList.length > 0 && activeIndex < newsList.length) {
+      const currentNews = newsList[activeIndex];
+      if (currentNews && !viewedCards.includes(currentNews.id)) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setViewedCards((prev) => [...prev, currentNews.id]);
+        logLuminaEvent("news_view", currentNews.id);
+      }
+    }
+  }, [activeIndex, newsList, viewedCards]);
 
   const toggleAudio = () => {
     if (typeof navigator !== "undefined" && navigator.vibrate) {
