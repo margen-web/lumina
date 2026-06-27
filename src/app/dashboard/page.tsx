@@ -358,7 +358,7 @@ export default function Dashboard() {
             <h2 className="text-lg font-bold text-white">Embudo de Lectura (Visualizaciones por noticia)</h2>
             <div className="flex flex-col gap-4">
               {[1, 2, 3, 4, 5].map((index) => {
-                const count = metrics.news_views[index.toString()] || 0;
+                const count = metrics.news_views?.[index.toString()] || 0;
                 // Calculate percentage based on total views
                 const percent = metrics.total_views > 0 ? Math.round((count / metrics.total_views) * 100) : 0;
                 return (
