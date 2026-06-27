@@ -43,7 +43,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" suppressHydrationWarning>
-      <body className="h-full overflow-hidden select-none bg-[var(--background)]">
+      <body className="min-h-full bg-[var(--background)]">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           {children}
           <Analytics />

@@ -289,7 +289,7 @@ export default function Home() {
   const currentTheme = theme === "system" ? resolvedTheme : theme;
 
   return (
-    <div className={`relative w-full h-[100dvh] flex flex-col justify-between overflow-hidden transition-all duration-1000 bg-gradient-to-br ${CATEGORY_GRADIENTS[activeIndex as keyof typeof CATEGORY_GRADIENTS] || CATEGORY_GRADIENTS[0]}`}>
+    <div className={`relative w-full h-[100dvh] flex flex-col justify-between overflow-hidden select-none transition-all duration-1000 bg-gradient-to-br ${CATEGORY_GRADIENTS[activeIndex as keyof typeof CATEGORY_GRADIENTS] || CATEGORY_GRADIENTS[0]}`}>
       
       {/* Partículas de Fondo Zen */}
       <FloatingParticles />
