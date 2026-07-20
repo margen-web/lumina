@@ -55,8 +55,8 @@ CREATE POLICY "Anyone can insert valid events" ON public.lumina_events
   FOR INSERT
   WITH CHECK (
     event_name IN ('page_view', 'news_view', 'feed_complete', 'news_share')
-    AND length(device_uuid) > 0 AND length(device_uuid) <= 100
-    AND (news_id IS NULL OR length(news_id) <= 50)
+    AND length(device_uuid::text) > 0 AND length(device_uuid::text) <= 100
+    AND (news_id IS NULL OR length(news_id::text) <= 50)
   );
 
 -- Only admins can read events (SELECT/UPDATE/DELETE blocked for anon and non-admin users)
