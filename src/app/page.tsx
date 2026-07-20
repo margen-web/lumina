@@ -70,7 +70,8 @@ export default function Home() {
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [reactions, setReactions] = useState<{ [newsId: string]: number }>({});
   const [userReactions, setUserReactions] = useState<string[]>([]);
-  const [newsList, setNewsList] = useState<NewsItem[]>(MOCK_NEWS);
+  const [newsList, setNewsList] = useState<NewsItem[]>([]);
+  const [newsStatus, setNewsStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [viewedCards, setViewedCards] = useState<string[]>([]);
   
   const visibleNewsList = newsList.slice(0, 5);
@@ -124,6 +125,7 @@ export default function Home() {
 
     // Fetch initial daily news list from Supabase
     const loadNews = async () => {
+      setNewsStatus('loading');
       try {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/lumina_news?select=id,category,title,summary,source_url&order=id.asc`, {
           headers: {
@@ -149,9 +151,19 @@ export default function Home() {
             }));
             setNewsList(mappedData);
           }
+          setNewsStatus('success');
+        } else {
+          throw new Error(`HTTP error! status: ${res.status}`);
         }
       } catch (err) {
         console.error("Error loading news from Supabase:", err);
+        if (process.env.NODE_ENV === 'development') {
+          console.warn("Using MOCK_NEWS in development mode as fallback.");
+          setNewsList(MOCK_NEWS);
+          setNewsStatus('success');
+        } else {
+          setNewsStatus('error');
+        }
       }
     };
 
@@ -213,7 +225,7 @@ export default function Home() {
 
   // Registrar evento de noticia vista de forma única por sesión
   useEffect(() => {
-    if (visibleNewsList.length > 0 && activeIndex < visibleNewsList.length) {
+    if (newsStatus === 'success' && visibleNewsList.length > 0 && activeIndex < visibleNewsList.length) {
       const currentNews = visibleNewsList[activeIndex];
       if (currentNews && !viewedCards.includes(currentNews.id)) {
         // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -221,7 +233,7 @@ export default function Home() {
         logLuminaEvent("news_view", currentNews.id);
       }
     }
-  }, [activeIndex, visibleNewsList, viewedCards]);
+  }, [activeIndex, visibleNewsList, viewedCards, newsStatus]);
 
   const toggleAudio = () => {
     if (typeof navigator !== "undefined" && navigator.vibrate) {
@@ -370,7 +382,36 @@ export default function Home() {
 
       {/* Contenedor Feed Snapping */}
       <main className="w-full h-full overflow-y-scroll snap-y snap-mandatory scroll-smooth focus:outline-none scrollbar-none">
-        {visibleNewsList.map((news, index) => (
+        {newsStatus === 'loading' && (
+          <article className="w-full h-[100dvh] flex flex-col justify-center items-center p-6 snap-start snap-always relative">
+            <div className="w-full max-w-sm bg-[var(--card)] rounded-[2.5rem] p-8 shadow-xl border border-black/5 dark:border-white/5 flex flex-col gap-6 relative text-center items-center">
+              <Sparkles className="w-10 h-10 animate-spin text-primary-DEFAULT" />
+              <h2 className="text-xl font-bold text-[var(--heading)]">Un momento...</h2>
+              <p className="text-sm leading-relaxed text-[var(--foreground)] opacity-90">
+                Preparando tus noticias positivas de hoy...
+              </p>
+            </div>
+          </article>
+        )}
+
+        {newsStatus === 'error' && (
+          <article className="w-full h-[100dvh] flex flex-col justify-center items-center p-6 snap-start snap-always relative">
+            <div className="w-full max-w-sm bg-[var(--card)] rounded-[2.5rem] p-8 shadow-xl border border-rose-500/10 flex flex-col gap-6 relative text-center items-center">
+              <h2 className="text-xl font-bold text-rose-500">Uy, algo salió mal</h2>
+              <p className="text-sm leading-relaxed text-[var(--foreground)] opacity-90">
+                No hemos podido cargar tu dosis de hoy. Inténtalo de nuevo en unos minutos.
+              </p>
+              <button 
+                onClick={() => window.location.reload()}
+                className="mt-2 px-6 py-3 rounded-full bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors font-bold text-sm cursor-pointer"
+              >
+                Reintentar
+              </button>
+            </div>
+          </article>
+        )}
+
+        {newsStatus === 'success' && visibleNewsList.map((news, index) => (
           <NewsCard
             key={news.id}
             news={news}
@@ -381,18 +422,21 @@ export default function Home() {
             onReact={() => handleToggleReaction(news.id)}
           />
         ))}
-        {hasCompleteDailyDose ? (
-          <EndOfFeed />
-        ) : (
-          <article className="w-full h-[100dvh] flex flex-col justify-center items-center p-6 snap-start snap-always relative">
-            <div className="w-full max-w-sm bg-[var(--card)] rounded-[2.5rem] p-8 shadow-xl border border-black/5 dark:border-white/5 flex flex-col gap-6 relative text-center items-center">
-              <Sparkles className="w-10 h-10 text-primary-DEFAULT opacity-50" />
-              <h2 className="text-xl font-bold text-[var(--heading)]">En preparación</h2>
-              <p className="text-sm leading-relaxed text-[var(--foreground)] opacity-90">
-                Estamos preparando tu dosis positiva de hoy. Vuelve dentro de un rato.
-              </p>
-            </div>
-          </article>
+
+        {newsStatus === 'success' && (
+          hasCompleteDailyDose ? (
+            <EndOfFeed />
+          ) : (
+            <article className="w-full h-[100dvh] flex flex-col justify-center items-center p-6 snap-start snap-always relative">
+              <div className="w-full max-w-sm bg-[var(--card)] rounded-[2.5rem] p-8 shadow-xl border border-black/5 dark:border-white/5 flex flex-col gap-6 relative text-center items-center">
+                <Sparkles className="w-10 h-10 text-primary-DEFAULT opacity-50" />
+                <h2 className="text-xl font-bold text-[var(--heading)]">En preparación</h2>
+                <p className="text-sm leading-relaxed text-[var(--foreground)] opacity-90">
+                  Estamos preparando tu dosis positiva de hoy. Vuelve dentro de un rato.
+                </p>
+              </div>
+            </article>
+          )
         )}
       </main>
 
