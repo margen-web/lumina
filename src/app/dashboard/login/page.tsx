@@ -1,17 +1,25 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, Suspense } from 'react'
 import { Sparkles, Lock, ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 
-export default function LoginPage() {
+function LoginForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
   const [isLoggingIn, setIsLoggingIn] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  
+  // Set initial error if passed in URL
+  useState(() => {
+    if (searchParams.get('error') === 'access_denied') {
+      setErrorMsg('No tienes permisos de administrador.')
+    }
+  })
   const supabase = createClient()
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -96,5 +104,13 @@ export default function LoginPage() {
         </Link>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">Cargando...</div>}>
+      <LoginForm />
+    </Suspense>
   )
 }

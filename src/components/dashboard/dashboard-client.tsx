@@ -25,7 +25,7 @@ interface Metrics {
 export default function DashboardClient({ initialNews, initialMetrics }: { initialNews: NewsItem[], initialMetrics: Metrics | null }) {
   const metrics = initialMetrics
   const [newsList, setNewsList] = useState<NewsItem[]>(initialNews)
-  const [selectedNewsTab, setSelectedNewsTab] = useState<string>("1")
+  const [selectedNewsTab, setSelectedNewsTab] = useState<string>(initialNews[0]?.id?.toString() || "1")
   
   const [isSavingNews, setIsSavingNews] = useState(false)
   const [saveSuccessMsg, setSaveSuccessMsg] = useState("")
@@ -60,7 +60,7 @@ export default function DashboardClient({ initialNews, initialMetrics }: { initi
 
     try {
       // Direct UPDATE to the table. RLS will protect it.
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('lumina_news')
         .update({
           category: formCategory,
@@ -69,8 +69,12 @@ export default function DashboardClient({ initialNews, initialMetrics }: { initi
           source_url: formSourceUrl
         })
         .eq('id', selectedNewsTab)
+        .select('id')
+        .single()
 
-      if (error) throw error
+      if (error || !data) {
+        throw new Error("No se pudo modificar la noticia")
+      }
 
       setSaveSuccessMsg("¡Noticia actualizada en directo con éxito!")
       setTimeout(() => setSaveSuccessMsg(""), 4000)
@@ -92,12 +96,6 @@ export default function DashboardClient({ initialNews, initialMetrics }: { initi
     }
   }
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
-    router.push('/dashboard/login')
-    router.refresh()
-  }
-
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center p-6 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-800 via-slate-900 to-black">
       
@@ -111,7 +109,11 @@ export default function DashboardClient({ initialNews, initialMetrics }: { initi
             Ver Feed Público
           </Link>
           <button 
-            onClick={handleLogout}
+            onClick={async () => {
+              await fetch('/auth/logout', { method: 'POST' });
+              router.push('/dashboard/login');
+              router.refresh();
+            }}
             className="flex items-center gap-1.5 px-4 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-full text-sm font-bold transition-colors"
           >
             <LogOut className="w-4 h-4" /> Salir

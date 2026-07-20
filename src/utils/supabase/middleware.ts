@@ -28,7 +28,39 @@ export async function updateSession(request: NextRequest) {
   )
 
   // refreshes the auth token
-  await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  const pathname = request.nextUrl.pathname;
+  
+  // Basic protection: if accessing /dashboard, ensure there is a session
+  if (pathname.startsWith('/dashboard') && pathname !== '/dashboard/login') {
+    if (!user) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/dashboard/login'
+      const redirectResponse = NextResponse.redirect(url)
+      // Copy cookies to redirect response exactly as Set-Cookie headers
+      supabaseResponse.headers.forEach((value, key) => {
+        if (key.toLowerCase() === 'set-cookie') {
+          redirectResponse.headers.append('set-cookie', value)
+        }
+      })
+      return redirectResponse
+    }
+  }
+
+  // Prevent accessing login if already authenticated
+  if (pathname === '/dashboard/login' && user) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/dashboard'
+    const redirectResponse = NextResponse.redirect(url)
+    // Copy cookies to redirect response exactly as Set-Cookie headers
+    supabaseResponse.headers.forEach((value, key) => {
+      if (key.toLowerCase() === 'set-cookie') {
+        redirectResponse.headers.append('set-cookie', value)
+      }
+    })
+    return redirectResponse
+  }
 
   return supabaseResponse
 }
