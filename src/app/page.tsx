@@ -1,7 +1,7 @@
 "use client";
 
 import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Flame, Sun, Moon, Sparkles, Volume2, VolumeX } from "lucide-react";
 import { useStreak } from "@/hooks/useStreak";
 import { ProgressBar } from "@/components/progress-bar";
@@ -9,6 +9,7 @@ import { NewsCard, NewsItem } from "@/components/news-card";
 import { EndOfFeed } from "@/components/end-of-feed";
 import { FloatingParticles } from "@/components/floating-particles";
 import { logLuminaEvent } from "@/lib/analytics";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "@/lib/supabase-config";
 
 // 5 Noticias Positivas Reales Mockeadas
 const MOCK_NEWS = [
@@ -58,8 +59,7 @@ const CATEGORY_GRADIENTS = {
   5: "from-yellow-500/10 via-amber-500/5 to-slate-900/10 dark:from-yellow-950/20 dark:via-amber-950/10 dark:to-slate-950",
 } as const;
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://btyfqihnriqlobxcbvno.supabase.co";
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ0eWZxaWhucmlxbG9ieGNidm5vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1MjA4MDcsImV4cCI6MjA5NDA5NjgwN30.P5b8vV_roeN0PsCJpGwua8XyPrK2T8DlsKGSvALI_5U";
+
 
 export default function Home() {
   const { streak, isMounted } = useStreak();
@@ -72,16 +72,13 @@ export default function Home() {
   const [userReactions, setUserReactions] = useState<string[]>([]);
   const [newsList, setNewsList] = useState<NewsItem[]>(MOCK_NEWS);
   const [viewedCards, setViewedCards] = useState<string[]>([]);
+  
+  const visibleNewsList = newsList.slice(0, 5);
+  const newsSignature = visibleNewsList.map((news) => news.id).join("|");
+  const hasCompleteDailyDose = visibleNewsList.length === 5;
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const [audio] = useState(() => {
-    if (typeof Audio !== "undefined") {
-      const a = new Audio("https://assets.mixkit.co/music/preview/mixkit-zen-meditation-625.mp3");
-      a.loop = true;
-      a.volume = 0.15;
-      return a;
-    }
-    return null;
-  });
+
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -91,11 +88,6 @@ export default function Home() {
     const hasSeen = localStorage.getItem("has_seen_onboarding");
     if (!hasSeen) {
       setShowOnboarding(true);
-    }
-
-    const savedAudio = localStorage.getItem("audio_enabled");
-    if (savedAudio === "true") {
-      setAudioEnabled(true);
     }
 
     // Load user reactions from localStorage
@@ -166,18 +158,22 @@ export default function Home() {
     loadReactions();
     loadNews();
   }, []);
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.removeAttribute("src");
+        audioRef.current.load();
+        audioRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
-    if (!audio) return;
-    if (audioEnabled) {
-      audio.play().catch((err) => console.log("Audio playback failed:", err));
-    } else {
-      audio.pause();
+    if (visibleNewsList.length > 0 && activeIndex >= visibleNewsList.length) {
+      setActiveIndex(visibleNewsList.length - 1);
     }
-    return () => {
-      audio.pause();
-    };
-  }, [audioEnabled, audio]);
+  }, [newsSignature, visibleNewsList.length, activeIndex]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -189,7 +185,10 @@ export default function Home() {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
             const index = parseInt(entry.target.getAttribute("data-index") || "0", 10);
-            setActiveIndex(index);
+            // Protect against out-of-bounds indices if DOM somehow desyncs
+            if (index < visibleNewsList.length) {
+              setActiveIndex(index);
+            }
           }
         });
       },
@@ -199,11 +198,11 @@ export default function Home() {
       }
     );
 
-    const cards = mainElement.querySelectorAll("article");
+    const cards = mainElement.querySelectorAll("article[data-news-card='true']");
     cards.forEach((card) => observer.observe(card));
 
     return () => observer.disconnect();
-  }, [mounted]);
+  }, [mounted, newsSignature, visibleNewsList.length]);
 
   // Vibración táctil suave en cambio de noticia
   useEffect(() => {
@@ -214,15 +213,15 @@ export default function Home() {
 
   // Registrar evento de noticia vista de forma única por sesión
   useEffect(() => {
-    if (newsList.length > 0 && activeIndex < newsList.length) {
-      const currentNews = newsList[activeIndex];
+    if (visibleNewsList.length > 0 && activeIndex < visibleNewsList.length) {
+      const currentNews = visibleNewsList[activeIndex];
       if (currentNews && !viewedCards.includes(currentNews.id)) {
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setViewedCards((prev) => [...prev, currentNews.id]);
         logLuminaEvent("news_view", currentNews.id);
       }
     }
-  }, [activeIndex, newsList, viewedCards]);
+  }, [activeIndex, visibleNewsList, viewedCards]);
 
   const toggleAudio = () => {
     if (typeof navigator !== "undefined" && navigator.vibrate) {
@@ -230,7 +229,24 @@ export default function Home() {
     }
     const nextState = !audioEnabled;
     setAudioEnabled(nextState);
-    localStorage.setItem("audio_enabled", nextState.toString());
+    
+    if (nextState) {
+      if (!audioRef.current && typeof Audio !== "undefined") {
+        const a = new Audio("https://assets.mixkit.co/music/preview/mixkit-zen-meditation-625.mp3");
+        a.loop = true;
+        a.volume = 0.15;
+        audioRef.current = a;
+      }
+      audioRef.current?.play().catch(err => {
+        console.log("Audio play failed:", err);
+        setAudioEnabled(false);
+      });
+    } else {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+    }
   };
 
   const handleToggleReaction = async (newsId: string) => {
@@ -354,18 +370,30 @@ export default function Home() {
 
       {/* Contenedor Feed Snapping */}
       <main className="w-full h-full overflow-y-scroll snap-y snap-mandatory scroll-smooth focus:outline-none scrollbar-none">
-        {newsList.map((news, index) => (
+        {visibleNewsList.map((news, index) => (
           <NewsCard
             key={news.id}
             news={news}
             index={index}
-            total={newsList.length}
+            total={visibleNewsList.length}
             reactionsCount={reactions[news.id] || 0}
             hasReacted={userReactions.includes(news.id)}
             onReact={() => handleToggleReaction(news.id)}
           />
         ))}
-        <EndOfFeed />
+        {hasCompleteDailyDose ? (
+          <EndOfFeed />
+        ) : (
+          <article className="w-full h-[100dvh] flex flex-col justify-center items-center p-6 snap-start snap-always relative">
+            <div className="w-full max-w-sm bg-[var(--card)] rounded-[2.5rem] p-8 shadow-xl border border-black/5 dark:border-white/5 flex flex-col gap-6 relative text-center items-center">
+              <Sparkles className="w-10 h-10 text-primary-DEFAULT opacity-50" />
+              <h2 className="text-xl font-bold text-[var(--heading)]">En preparación</h2>
+              <p className="text-sm leading-relaxed text-[var(--foreground)] opacity-90">
+                Estamos preparando tu dosis positiva de hoy. Vuelve dentro de un rato.
+              </p>
+            </div>
+          </article>
+        )}
       </main>
 
       {/* Pantalla de Onboarding (primer ingreso) */}

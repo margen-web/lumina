@@ -4,8 +4,7 @@ import { useEffect, useState } from "react";
 import { Sparkles, ArrowLeft, Loader2, Save, Users, Eye, CheckCircle, Share2, LogIn, Lock } from "lucide-react";
 import Link from "next/link";
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://btyfqihnriqlobxcbvno.supabase.co";
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ0eWZxaWhucmlxbG9ieGNidm5vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1MjA4MDcsImV4cCI6MjA5NDA5NjgwN30.P5b8vV_roeN0PsCJpGwua8XyPrK2T8DlsKGSvALI_5U";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "@/lib/supabase-config";
 
 interface NewsItem {
   id: string;
@@ -383,6 +382,12 @@ export default function Dashboard() {
         {/* News Editor Section */}
         <section className="bg-slate-900/60 backdrop-blur-xl border border-white/5 p-6 md:p-8 rounded-[2.5rem] shadow-xl flex flex-col gap-6">
           <h2 className="text-lg font-bold text-white">Editor de Noticias Diarias</h2>
+          
+          {newsList.length !== 5 && (
+            <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 p-4 rounded-2xl text-sm font-semibold text-center">
+              ⚠️ Atención: Actualmente hay {newsList.length} noticias en la base de datos. Lúmina requiere exactamente 5 noticias para funcionar correctamente.
+            </div>
+          )}
 
           {/* News tab switcher */}
           <div className="flex gap-2 p-1.5 rounded-full bg-slate-950/80 border border-white/5 w-full max-w-md mx-auto">

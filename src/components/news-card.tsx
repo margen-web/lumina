@@ -30,7 +30,7 @@ export function NewsCard({ news, index, total, reactionsCount, hasReacted, onRea
     setIsCopied(true); setTimeout(() => setIsCopied(false), 2000);
   };
   return (
-    <article data-index={index} className="w-full h-[100dvh] flex flex-col justify-center items-center p-6 snap-start snap-always relative">
+    <article data-news-card="true" data-index={index} className="w-full h-[100dvh] flex flex-col justify-center items-center p-6 snap-start snap-always relative">
       <div className="w-full max-w-sm bg-[var(--card)] rounded-[2.5rem] p-8 shadow-xl border border-black/5 dark:border-white/5 flex flex-col gap-6 relative">
         <div className="flex items-center justify-between">
           <span className="px-4 py-1.5 rounded-full text-xs font-semibold bg-secondary-light/30 text-secondary-dark">{news.category}</span>

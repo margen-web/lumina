@@ -4,7 +4,7 @@ import { Analytics } from "@vercel/analytics/react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://lumina-app-drab.vercel.app"),
+  metadataBase: process.env.NEXT_PUBLIC_SITE_URL ? new URL(process.env.NEXT_PUBLIC_SITE_URL) : undefined,
   title: "Lumina - 5 Noticias Positivas",
   description: "Una dosis diaria de optimismo para empezar tu día con calma y positividad.",
   manifest: "/manifest.json",
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
     description: "Una dosis diaria de optimismo para empezar tu día con calma y positividad.",
     type: "website",
     locale: "es_ES",
-    url: "https://lumina-app-drab.vercel.app",
+    url: process.env.NEXT_PUBLIC_SITE_URL,
     siteName: "Lumina",
   },
   twitter: {
