@@ -13,3 +13,5 @@ build/
 public/sw.js
 public/sw.js.map
 public/workbox-*.js
+# Audit scripts
+audit_*.js
