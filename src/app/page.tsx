@@ -315,6 +315,7 @@ export default function Home() {
   }
 
   const currentTheme = theme === "system" ? resolvedTheme : theme;
+  const progressIndex = newsStatus === "success" && visibleNewsList.length > 0 ? activeIndex : -1;
 
   return (
     <div className={`relative w-full h-[100dvh] flex flex-col justify-between overflow-hidden select-none transition-all duration-1000 bg-gradient-to-br ${CATEGORY_GRADIENTS[activeIndex as keyof typeof CATEGORY_GRADIENTS] || CATEGORY_GRADIENTS[0]}`}>
@@ -377,7 +378,7 @@ export default function Home() {
         </div>
 
         {/* Barra de progreso */}
-        <ProgressBar activeIndex={activeIndex} />
+        <ProgressBar activeIndex={progressIndex} />
       </header>
 
       {/* Contenedor Feed Snapping */}
