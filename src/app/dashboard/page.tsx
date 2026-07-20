@@ -59,10 +59,25 @@ export default async function DashboardPage() {
     sourceUrl: item.source_url,
   }))
 
+  // Validate that metrics is an object and not an array
+  let formattedMetrics = null
+  if (metrics && typeof metrics === 'object' && !Array.isArray(metrics)) {
+    const raw = metrics as Record<string, unknown>
+    formattedMetrics = {
+      total_views: Number(raw.total_views || 0),
+      unique_visitors: Number(raw.unique_visitors || 0),
+      feed_completes: Number(raw.feed_completes || 0),
+      shares: Number(raw.shares || 0),
+      news_views: (raw.news_views && typeof raw.news_views === 'object' && !Array.isArray(raw.news_views))
+        ? (raw.news_views as Record<string, number>)
+        : {},
+    }
+  }
+
   return (
     <DashboardClient 
       initialNews={parsedNewsList} 
-      initialMetrics={metrics} 
+      initialMetrics={formattedMetrics} 
     />
   )
 }

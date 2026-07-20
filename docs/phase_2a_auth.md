@@ -1,6 +1,6 @@
 # Fase 2A: Autenticación de Dashboard Lúmina
 
-Esta actualización final de la Fase 2A aborda todos los bloqueos detectados en el despliegue anterior y refina el flujo de seguridad, redirección y el modelo de datos analítico real.
+Esta actualización final de la Fase 2A aborda todos los bloqueos detectados en la auditoría final y refina la seguridad de RLS, las respuestas RPC y los planes de rollback.
 
 ## 🔗 Enlaces
 
@@ -34,8 +34,8 @@ sequenceDiagram
             Next.js (Server Component)-->>User: Redirige a /dashboard/login?error=access_denied
         else Es Admin
             Supabase DB-->>Next.js (Server Component): user_id
-            Next.js (Server Component)->>Supabase DB: Fetch Metrics & NewsList
-            Supabase DB-->>Next.js (Server Component): Datos privados
+            Next.js (Server Component)->>Supabase DB: Fetch Metrics (get_lumina_metrics) & NewsList
+            Supabase DB-->>Next.js (Server Component): JSON de métricas y noticias
             Next.js (Server Component)-->>User: Renderiza HTML del Dashboard
         end
     end
@@ -44,48 +44,36 @@ sequenceDiagram
 ## 📝 Resumen de Cambios Estructurales
 
 - **Cookies y Redirecciones:** `proxy.ts` delega el enrutamiento a `updateSession`, asegurando que `Set-Cookie` persista íntegramente durante los refrescos de sesión redirigidos.
-- **Logout y Access Denied:** Nuevas rutas dedicadas exclusivas que fuerzan la destrucción de la sesión de Supabase Auth sin bucles en componentes.
-- **Analítica Confirmada:** Hemos constatado que el esquema activo se llama `lumina_events` (no `lumina_analytics`). Las métricas se han reestructurado sobre este esquema.
+- **Logout y Access Denied:** Rutas dedicadas exclusivas (`/auth/logout` y `/auth/access-denied`) que fuerzan la destrucción de la sesión de Supabase Auth sin bucles en componentes.
+- **Analítica Confirmada & Contrato RPC:** La tabla activa es `lumina_events`. La función `get_lumina_metrics()` devuelve un objeto `jsonb` unificado (`jsonb_build_object`) con `total_views`, `unique_visitors`, `feed_completes`, `shares` y `news_views`.
 
 ## 🗄️ Estrategia de Migraciones de Producción
 
-En lugar de destruir y recrear todo al mismo tiempo, el proceso de base de datos se ha dividido en dos fases para garantizar la continuidad del feed:
+El proceso de base de datos se divide en dos fases independientes para evitar caídas de servicio:
 
 ### Fase 1: Migración Preparatoria ([20260720_A_preparatory.sql](../supabase/migrations/20260720_A_preparatory.sql))
-Establece la seguridad de Supabase y prepara todo, sin eliminar funciones antiguas:
+- Ejecuta un bloque dinámico PL/pgSQL que elimina **todas las políticas RLS preexistentes** en `lumina_news`, `lumina_events` y `lumina_admins` antes de crear las nuevas (evitando combinaciones permisivas indeseadas por `OR`).
 - Crea `lumina_admins`.
-- Aplica RLS estricto a `lumina_news` (permitiendo INSERT, UPDATE, DELETE solo a admins, SELECT a todos).
-- Aplica RLS a `lumina_events`. Permite `INSERT` a cualquiera bajo validación (event_name limitado a 'page_view', 'news_view', etc., device_uuid válido limitado a 100 caracteres).
-- Crea la nueva función RPC segura `get_lumina_metrics()`.
+- Protege `lumina_news` (SELECT público, INSERT/UPDATE/DELETE reservado a admins).
+- Protege `lumina_events` (INSERT público con validación de tipo de evento y longitud de `device_uuid`; SELECT reservado a admins).
+- Crea la función RPC `get_lumina_metrics()` con retorno `jsonb`.
 
-### Fase 2: Limpieza ([20260720_B_cleanup.sql](../supabase/migrations/20260720_B_cleanup.sql))
-Solo debe ejecutarse tras comprobar el Dashboard:
+### Fase 2: Limpieza de Funciones Inseguras ([20260720_B_cleanup.sql](../supabase/migrations/20260720_B_cleanup.sql))
+Se ejecutará **únicamente tras comprobar el despliegue del nuevo código**:
 - Elimina la RPC vulnerable `update_lumina_news(text, text...)`.
 - Elimina la RPC antigua con passcode `get_lumina_metrics(text)`.
 
-### Instrucciones Exactas de Despliegue
-
-> [!IMPORTANT]
-> Sigue rigurosamente estos pasos para pasar de la versión vieja a la segura sin perder datos.
-
-1. **(Previo)** Crea el usuario en Supabase Auth desde tu panel y anota el UUID.
-2. Ejecuta `20260720_A_preparatory.sql` en la consola SQL.
-3. Añade al administrador: `INSERT INTO public.lumina_admins (user_id) VALUES ('TU-UUID-AQUI');`.
-4. Haz **Merge** del Pull Request para desplegar los cambios en Vercel.
-5. Inicia sesión en el nuevo `/dashboard`. Verifica que puedes editar una noticia.
-6. Si todo funciona correctamente, ejecuta finalmente `20260720_B_cleanup.sql` en la consola SQL.
+> [!NOTE]
+> La Migración B es una limpieza de seguridad irreversible por diseño. Tras eliminar las RPC vulnerables basadas en passcode, **no se recrearán automáticamente**. En caso de requerir correcciones posteriores tras la Fase 2, se aplicará un *forward fix* (parche hacia adelante) manteniendo la autorización mediante Supabase Auth.
 
 ## 🔙 Plan de Rollback Controlado
 
-Existen scripts versionados de rollback para deshacer los cambios en el orden inverso:
-- **[rollback_B.sql](../supabase/migrations/rollback_B.sql)**: Restaura la firma de las RPC vulnerables con una capa de lógica dummy.
-- **[rollback_A.sql](../supabase/migrations/rollback_A.sql)**: Elimina RLS de eventos y noticias, borra las nuevas políticas y borra la tabla de admins.
+- **[rollback_A.sql](../supabase/migrations/rollback_A.sql)**: Si la migración A fallara antes del despliegue, elimina `lumina_admins`, restaura el RLS seguro básico y retira las nuevas políticas sin dejar las tablas desprotegidas.
 
-## ⚠️ Pruebas Comprobadas (Fuera de Producción)
-✅ Login exitoso como Admin.
-✅ Intento fallido de login (usuario no admin, contraseñas malas).
-✅ Logout manual (vía POST y redirección).
-✅ Expulsión de seguridad forzada (redirección a login).
-✅ Retención de cookies tras refresh.
-✅ Fallback de IDs asíncronos para device_uuid permitidos (vía CHECK constraint > 0 chars).
-✅ Actualización de noticias confirmando la fila exacta (`.single()`).
+## ⚠️ Matriz de Pruebas Verificadas
+✅ Usuario autenticado no administrador NO puede actualizar `lumina_news` (bloqueado por RLS).
+✅ Administrador en `lumina_admins` SÍ puede actualizar exactamente 1 fila (confirmado con `.select('id').single()`).
+✅ Cliente anónimo SÍ puede insertar eventos válidos en `lumina_events`.
+✅ Cliente anónimo NO puede leer `lumina_events` (401 / rls policy violation).
+✅ `get_lumina_metrics()` devuelve un objeto `jsonb` válido verificado en servidor y cliente.
+✅ `npm run build` pasa limpiamente.
