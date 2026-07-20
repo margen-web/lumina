@@ -8,3 +8,8 @@ node_modules
 coverage/
 dist/
 build/
+
+# Next-PWA generated files
+public/sw.js
+public/sw.js.map
+public/workbox-*.js

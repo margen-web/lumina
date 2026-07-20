@@ -1,7 +1,7 @@
 "use client";
 
 import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Flame, Sun, Moon, Sparkles, Volume2, VolumeX } from "lucide-react";
 import { useStreak } from "@/hooks/useStreak";
 import { ProgressBar } from "@/components/progress-bar";
@@ -9,6 +9,7 @@ import { NewsCard, NewsItem } from "@/components/news-card";
 import { EndOfFeed } from "@/components/end-of-feed";
 import { FloatingParticles } from "@/components/floating-particles";
 import { logLuminaEvent } from "@/lib/analytics";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "@/lib/supabase-config";
 
 // 5 Noticias Positivas Reales Mockeadas
 const MOCK_NEWS = [
@@ -58,8 +59,7 @@ const CATEGORY_GRADIENTS = {
   5: "from-yellow-500/10 via-amber-500/5 to-slate-900/10 dark:from-yellow-950/20 dark:via-amber-950/10 dark:to-slate-950",
 } as const;
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://btyfqihnriqlobxcbvno.supabase.co";
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ0eWZxaWhucmlxbG9ieGNidm5vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1MjA4MDcsImV4cCI6MjA5NDA5NjgwN30.P5b8vV_roeN0PsCJpGwua8XyPrK2T8DlsKGSvALI_5U";
+
 
 export default function Home() {
   const { streak, isMounted } = useStreak();
@@ -70,18 +70,16 @@ export default function Home() {
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [reactions, setReactions] = useState<{ [newsId: string]: number }>({});
   const [userReactions, setUserReactions] = useState<string[]>([]);
-  const [newsList, setNewsList] = useState<NewsItem[]>(MOCK_NEWS);
+  const [newsList, setNewsList] = useState<NewsItem[]>([]);
+  const [newsStatus, setNewsStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [viewedCards, setViewedCards] = useState<string[]>([]);
+  
+  const visibleNewsList = newsList.slice(0, 5);
+  const newsSignature = visibleNewsList.map((news) => news.id).join("|");
+  const hasCompleteDailyDose = visibleNewsList.length === 5;
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const [audio] = useState(() => {
-    if (typeof Audio !== "undefined") {
-      const a = new Audio("https://assets.mixkit.co/music/preview/mixkit-zen-meditation-625.mp3");
-      a.loop = true;
-      a.volume = 0.15;
-      return a;
-    }
-    return null;
-  });
+
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -91,11 +89,6 @@ export default function Home() {
     const hasSeen = localStorage.getItem("has_seen_onboarding");
     if (!hasSeen) {
       setShowOnboarding(true);
-    }
-
-    const savedAudio = localStorage.getItem("audio_enabled");
-    if (savedAudio === "true") {
-      setAudioEnabled(true);
     }
 
     // Load user reactions from localStorage
@@ -132,6 +125,7 @@ export default function Home() {
 
     // Fetch initial daily news list from Supabase
     const loadNews = async () => {
+      setNewsStatus('loading');
       try {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/lumina_news?select=id,category,title,summary,source_url&order=id.asc`, {
           headers: {
@@ -157,27 +151,41 @@ export default function Home() {
             }));
             setNewsList(mappedData);
           }
+          setNewsStatus('success');
+        } else {
+          throw new Error(`HTTP error! status: ${res.status}`);
         }
       } catch (err) {
         console.error("Error loading news from Supabase:", err);
+        if (process.env.NODE_ENV === 'development') {
+          console.warn("Using MOCK_NEWS in development mode as fallback.");
+          setNewsList(MOCK_NEWS);
+          setNewsStatus('success');
+        } else {
+          setNewsStatus('error');
+        }
       }
     };
 
     loadReactions();
     loadNews();
   }, []);
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.removeAttribute("src");
+        audioRef.current.load();
+        audioRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
-    if (!audio) return;
-    if (audioEnabled) {
-      audio.play().catch((err) => console.log("Audio playback failed:", err));
-    } else {
-      audio.pause();
+    if (visibleNewsList.length > 0 && activeIndex >= visibleNewsList.length) {
+      setActiveIndex(visibleNewsList.length - 1);
     }
-    return () => {
-      audio.pause();
-    };
-  }, [audioEnabled, audio]);
+  }, [newsSignature, visibleNewsList.length, activeIndex]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -189,7 +197,10 @@ export default function Home() {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
             const index = parseInt(entry.target.getAttribute("data-index") || "0", 10);
-            setActiveIndex(index);
+            // Protect against out-of-bounds indices if DOM somehow desyncs
+            if (index < visibleNewsList.length) {
+              setActiveIndex(index);
+            }
           }
         });
       },
@@ -199,11 +210,11 @@ export default function Home() {
       }
     );
 
-    const cards = mainElement.querySelectorAll("article");
+    const cards = mainElement.querySelectorAll("article[data-news-card='true']");
     cards.forEach((card) => observer.observe(card));
 
     return () => observer.disconnect();
-  }, [mounted]);
+  }, [mounted, newsSignature, visibleNewsList.length]);
 
   // Vibración táctil suave en cambio de noticia
   useEffect(() => {
@@ -214,15 +225,15 @@ export default function Home() {
 
   // Registrar evento de noticia vista de forma única por sesión
   useEffect(() => {
-    if (newsList.length > 0 && activeIndex < newsList.length) {
-      const currentNews = newsList[activeIndex];
+    if (newsStatus === 'success' && visibleNewsList.length > 0 && activeIndex < visibleNewsList.length) {
+      const currentNews = visibleNewsList[activeIndex];
       if (currentNews && !viewedCards.includes(currentNews.id)) {
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setViewedCards((prev) => [...prev, currentNews.id]);
         logLuminaEvent("news_view", currentNews.id);
       }
     }
-  }, [activeIndex, newsList, viewedCards]);
+  }, [activeIndex, visibleNewsList, viewedCards, newsStatus]);
 
   const toggleAudio = () => {
     if (typeof navigator !== "undefined" && navigator.vibrate) {
@@ -230,7 +241,24 @@ export default function Home() {
     }
     const nextState = !audioEnabled;
     setAudioEnabled(nextState);
-    localStorage.setItem("audio_enabled", nextState.toString());
+    
+    if (nextState) {
+      if (!audioRef.current && typeof Audio !== "undefined") {
+        const a = new Audio("https://assets.mixkit.co/music/preview/mixkit-zen-meditation-625.mp3");
+        a.loop = true;
+        a.volume = 0.15;
+        audioRef.current = a;
+      }
+      audioRef.current?.play().catch(err => {
+        console.log("Audio play failed:", err);
+        setAudioEnabled(false);
+      });
+    } else {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+    }
   };
 
   const handleToggleReaction = async (newsId: string) => {
@@ -287,6 +315,7 @@ export default function Home() {
   }
 
   const currentTheme = theme === "system" ? resolvedTheme : theme;
+  const progressIndex = newsStatus === "success" && visibleNewsList.length > 0 ? activeIndex : -1;
 
   return (
     <div className={`relative w-full h-[100dvh] flex flex-col justify-between overflow-hidden select-none transition-all duration-1000 bg-gradient-to-br ${CATEGORY_GRADIENTS[activeIndex as keyof typeof CATEGORY_GRADIENTS] || CATEGORY_GRADIENTS[0]}`}>
@@ -349,23 +378,67 @@ export default function Home() {
         </div>
 
         {/* Barra de progreso */}
-        <ProgressBar activeIndex={activeIndex} />
+        <ProgressBar activeIndex={progressIndex} />
       </header>
 
       {/* Contenedor Feed Snapping */}
       <main className="w-full h-full overflow-y-scroll snap-y snap-mandatory scroll-smooth focus:outline-none scrollbar-none">
-        {newsList.map((news, index) => (
+        {newsStatus === 'loading' && (
+          <article className="w-full h-[100dvh] flex flex-col justify-center items-center p-6 snap-start snap-always relative">
+            <div className="w-full max-w-sm bg-[var(--card)] rounded-[2.5rem] p-8 shadow-xl border border-black/5 dark:border-white/5 flex flex-col gap-6 relative text-center items-center">
+              <Sparkles className="w-10 h-10 animate-spin text-primary-DEFAULT" />
+              <h2 className="text-xl font-bold text-[var(--heading)]">Un momento...</h2>
+              <p className="text-sm leading-relaxed text-[var(--foreground)] opacity-90">
+                Preparando tus noticias positivas de hoy...
+              </p>
+            </div>
+          </article>
+        )}
+
+        {newsStatus === 'error' && (
+          <article className="w-full h-[100dvh] flex flex-col justify-center items-center p-6 snap-start snap-always relative">
+            <div className="w-full max-w-sm bg-[var(--card)] rounded-[2.5rem] p-8 shadow-xl border border-rose-500/10 flex flex-col gap-6 relative text-center items-center">
+              <h2 className="text-xl font-bold text-rose-500">Uy, algo salió mal</h2>
+              <p className="text-sm leading-relaxed text-[var(--foreground)] opacity-90">
+                No hemos podido cargar tu dosis de hoy. Inténtalo de nuevo en unos minutos.
+              </p>
+              <button 
+                onClick={() => window.location.reload()}
+                className="mt-2 px-6 py-3 rounded-full bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors font-bold text-sm cursor-pointer"
+              >
+                Reintentar
+              </button>
+            </div>
+          </article>
+        )}
+
+        {newsStatus === 'success' && visibleNewsList.map((news, index) => (
           <NewsCard
             key={news.id}
             news={news}
             index={index}
-            total={newsList.length}
+            total={visibleNewsList.length}
             reactionsCount={reactions[news.id] || 0}
             hasReacted={userReactions.includes(news.id)}
             onReact={() => handleToggleReaction(news.id)}
           />
         ))}
-        <EndOfFeed />
+
+        {newsStatus === 'success' && (
+          hasCompleteDailyDose ? (
+            <EndOfFeed />
+          ) : (
+            <article className="w-full h-[100dvh] flex flex-col justify-center items-center p-6 snap-start snap-always relative">
+              <div className="w-full max-w-sm bg-[var(--card)] rounded-[2.5rem] p-8 shadow-xl border border-black/5 dark:border-white/5 flex flex-col gap-6 relative text-center items-center">
+                <Sparkles className="w-10 h-10 text-primary-DEFAULT opacity-50" />
+                <h2 className="text-xl font-bold text-[var(--heading)]">En preparación</h2>
+                <p className="text-sm leading-relaxed text-[var(--foreground)] opacity-90">
+                  Estamos preparando tu dosis positiva de hoy. Vuelve dentro de un rato.
+                </p>
+              </div>
+            </article>
+          )
+        )}
       </main>
 
       {/* Pantalla de Onboarding (primer ingreso) */}
