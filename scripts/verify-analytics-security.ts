@@ -1,36 +1,52 @@
 import { createClient } from "@supabase/supabase-js";
 
 /**
- * LIVE VERIFICATION SCRIPT: ANALYTICS SECURITY & ATOMIC DEDUPLICATION
+ * LIVE VERIFICATION HARNESS: END-TO-END ANALYTICS SECURITY & ATOMIC DEDUPLICATION
  * 
- * Este script se ejecuta para verificar contra una instancia REAL de Supabase:
- * 1. Rechazo de escrituras directas con clave anónima (RLS / Revoke).
- * 2. Inserción autorizada mediante clave de servicio (service_role).
- * 3. Atomicidad del índice único parcial bajo concurrencia (código 23505).
- * 4. Permitir eventos en fechas distintas para el mismo dispositivo.
- * 5. Limpieza automática de registros de prueba.
+ * Verifica el flujo completo en un entorno REAL:
+ * 1. Anon Client -> Intento de INSERT directo a DB -> Rechazado por RLS / Revoke de privilegios.
+ * 2. Cliente HTTP -> POST /api/events -> Backend con getSupabaseServer() y service_role -> 201 Created.
+ * 3. Cliente HTTP -> 2 POST concurrentes /api/events (mismo device_uuid y edition_date) -> 1x 201, 1x 200 (deduplicated: true).
+ * 4. DB Inspection -> Exactamente 1 fila de edition_completed en PostgreSQL (Índice único atómico 23505 verificado).
+ * 5. Cliente HTTP -> POST /api/events para fecha diferente -> 201 Created y 2 filas totales en DB.
+ * 6. Cleanup -> Limpieza garantizada en bloque finally usando serviceClient.
  * 
- * Ejecución: npx tsx scripts/verify-analytics-security.ts
+ * Uso:
+ * LUMINA_BASE_URL="http://localhost:3000" npx tsx scripts/verify-analytics-security.ts
+ * o contra preview:
+ * LUMINA_BASE_URL="https://lumina-preview-url.vercel.app" npx tsx scripts/verify-analytics-security.ts
  */
+
+const rawBaseUrl = process.env.LUMINA_BASE_URL || "http://localhost:3000";
+const baseUrl = rawBaseUrl.replace(/\/+$/, "");
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+interface SummaryResults {
+  anonDirectInsert: boolean;
+  apiNormalInsert: boolean;
+  apiConcurrentDedupe: boolean;
+  dbExactRowCount: boolean;
+  differentEditionDate: boolean;
+  cleanup: boolean;
+}
+
 async function runLiveVerification() {
   console.log("==================================================================");
-  console.log("  LUMINA LIVE ANALYTICS SECURITY & ATOMIC DEDUPE VERIFICATION");
-  console.log("==================================================================\n");
+  console.log("  LUMINA LIVE VERIFICATION HARNESS (E2E API & DATABASE)");
+  console.log("==================================================================");
+  console.log(`Target URL: ${baseUrl}\n`);
 
   if (!supabaseUrl || !anonKey) {
-    console.error("❌ ERROR: Faltan variables de entorno NEXT_PUBLIC_SUPABASE_URL o NEXT_PUBLIC_SUPABASE_ANON_KEY.");
-    process.exit(1);
+    throw new Error("Faltan variables de entorno NEXT_PUBLIC_SUPABASE_URL o NEXT_PUBLIC_SUPABASE_ANON_KEY.");
   }
 
   if (!serviceRoleKey) {
-    console.error("❌ ERROR: Falta variable SUPABASE_SERVICE_ROLE_KEY.");
-    console.error("   Configura SUPABASE_SERVICE_ROLE_KEY en tu entorno o .env.local antes de ejecutar.");
-    process.exit(1);
+    throw new Error(
+      "Falta SUPABASE_SERVICE_ROLE_KEY. Configúrala en tu entorno o .env.local para ejecutar la inspección y limpieza."
+    );
   }
 
   const anonClient = createClient(supabaseUrl, anonKey, { auth: { persistSession: false } });
@@ -42,12 +58,23 @@ async function runLiveVerification() {
 
   console.log(`Dispositivo de prueba: ${testDeviceUuid}\n`);
 
+  const summary: SummaryResults = {
+    anonDirectInsert: false,
+    apiNormalInsert: false,
+    apiConcurrentDedupe: false,
+    dbExactRowCount: false,
+    differentEditionDate: false,
+    cleanup: false,
+  };
+
+  let executionFailed = false;
+
   try {
     // -------------------------------------------------------------------------
-    // TEST A: Intento de INSERT directo con anon key
+    // TEST A: Intento de INSERT directo con anon key (PostgreSQL RLS / Revoke)
     // -------------------------------------------------------------------------
-    console.log("--- TEST A: Intento de INSERT directo usando clave anónima (Browser Anon) ---");
-    const { data: anonData, error: anonError } = await anonClient.from("lumina_events").insert({
+    console.log("--- 1. TEST A: Intento de INSERT directo usando clave anónima (Browser Anon) ---");
+    const { error: anonError } = await anonClient.from("lumina_events").insert({
       event_name: "story_viewed",
       device_uuid: testDeviceUuid,
       session_id: "test_sess_anon",
@@ -55,122 +82,186 @@ async function runLiveVerification() {
     });
 
     if (anonError) {
-      console.log(`✓ RECHAZADO CORRECTAMENTE por RLS/Permisos: [${anonError.code}] ${anonError.message}`);
+      console.log(`✓ RECHAZADO CORRECTAMENTE por RLS/Privilegios: [${anonError.code}] ${anonError.message}`);
+      summary.anonDirectInsert = true;
     } else {
       console.error("❌ FALLO DE SEGURIDAD: El cliente anónimo pudo insertar directamente en lumina_events.");
-      console.error("   Datos insertados:", anonData);
-      process.exit(1);
+      summary.anonDirectInsert = false;
+      executionFailed = true;
     }
 
     // -------------------------------------------------------------------------
-    // TEST B: Inserción autorizada vía Service Role Client
+    // TEST B: HTTP POST real a /api/events (Validación E2E Route -> Service Role)
     // -------------------------------------------------------------------------
-    console.log("\n--- TEST B: Inserción autorizada mediante Service Role Client ---");
-    const { error: serviceError } = await serviceClient.from("lumina_events").insert({
-      event_name: "story_viewed",
-      device_uuid: testDeviceUuid,
-      session_id: "test_sess_service",
-      edition_date: testEditionDate1,
+    console.log(`\n--- 2. TEST B: HTTP POST real a ${baseUrl}/api/events (story_viewed) ---`);
+    const resB = await fetch(`${baseUrl}/api/events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        event_name: "story_viewed",
+        device_uuid: testDeviceUuid,
+        session_id: "test_sess_api_normal",
+        position: 1,
+        edition_date: testEditionDate1,
+        metadata: { source_type: "harness_test" },
+      }),
     });
 
-    if (serviceError) {
-      console.error("❌ ERROR: El cliente service_role no pudo insertar evento:", serviceError.message);
-      process.exit(1);
+    const bodyB = await resB.json().catch(() => null);
+    if (resB.status === 201 && bodyB?.ok === true) {
+      console.log(`✓ API POST /api/events respondió 201 Created: ${JSON.stringify(bodyB)}`);
+      summary.apiNormalInsert = true;
+    } else {
+      console.error(`❌ ERROR en POST /api/events: Status ${resB.status}`, bodyB);
+      summary.apiNormalInsert = false;
+      executionFailed = true;
     }
-    console.log("✓ Inserción autorizada completada con éxito.");
 
     // -------------------------------------------------------------------------
-    // TEST C: Dos inserciones concurrentes de edition_completed (Mismo día y device)
+    // TEST C: Dos HTTP POST concurrentes de edition_completed a /api/events
     // -------------------------------------------------------------------------
-    console.log("\n--- TEST C: Concurrencia de edition_completed (Mismo device + Misma fecha) ---");
-    const payload = {
+    console.log(`\n--- 3. TEST C: 2 HTTP POST concurrentes a /api/events (edition_completed) ---`);
+    const payloadC = {
       event_name: "edition_completed",
       device_uuid: testDeviceUuid,
-      session_id: "test_sess_concurrent",
+      session_id: "test_sess_api_concurrent",
       edition_date: testEditionDate1,
+      metadata: { current_streak: 1 },
     };
 
-    const [res1, res2] = await Promise.all([
-      serviceClient.from("lumina_events").insert(payload),
-      serviceClient.from("lumina_events").insert(payload),
+    const [fetch1, fetch2] = await Promise.all([
+      fetch(`${baseUrl}/api/events`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payloadC),
+      }),
+      fetch(`${baseUrl}/api/events`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payloadC),
+      }),
     ]);
 
-    const results = [res1, res2];
-    const successes = results.filter((r) => !r.error);
-    const uniqueViolations = results.filter((r) => r.error && r.error.code === "23505");
+    const json1 = await fetch1.json().catch(() => null);
+    const json2 = await fetch2.json().catch(() => null);
 
-    console.log(`Resultados concurrentes: ${successes.length} insert exitoso, ${uniqueViolations.length} unique_violation (23505).`);
+    console.log(`Respuesta 1: Status ${fetch1.status}`, json1);
+    console.log(`Respuesta 2: Status ${fetch2.status}`, json2);
 
-    if (successes.length === 1 && uniqueViolations.length === 1) {
-      console.log("✓ ATOMICIDAD CONFIRMADA EN POSTGRESQL: Exactamente 1 insert permitido, el duplicado disparó error 23505.");
+    const has201 = fetch1.status === 201 || fetch2.status === 201;
+    const has200Dedup =
+      (fetch1.status === 200 && json1?.deduplicated === true) ||
+      (fetch2.status === 200 && json2?.deduplicated === true);
+
+    if (has201 && has200Dedup) {
+      console.log("✓ DEDUPLICACIÓN ATÓMICA CONFIRMADA EN RUTA HTTP: 1x 201 Created y 1x 200 Deduplicated.");
+      summary.apiConcurrentDedupe = true;
     } else {
-      console.error("❌ FALLO EN RESTRICCIÓN ÚNICA: Se esperaban 1 éxito y 1 error 23505.");
-      console.error("Resultados:", results);
-      process.exit(1);
+      console.error("❌ FALLO EN DEDUPLICACIÓN CONCURRENTE HTTP: Se esperaba una 201 y una 200 { deduplicated: true }.");
+      summary.apiConcurrentDedupe = false;
+      executionFailed = true;
     }
 
-    // Comprobar filas reales en la tabla
-    const { data: rowsDay1, error: countError1 } = await serviceClient
+    // Inspección en Base de Datos vía serviceClient (Solo lectura)
+    const { data: rowsDay1, error: countError } = await serviceClient
       .from("lumina_events")
       .select("id")
       .eq("device_uuid", testDeviceUuid)
       .eq("event_name", "edition_completed")
       .eq("edition_date", testEditionDate1);
 
-    if (countError1 || !rowsDay1 || rowsDay1.length !== 1) {
-      console.error("❌ ERROR: La base de datos no contiene exactamente 1 fila para la fecha 1.");
-      process.exit(1);
+    if (!countError && rowsDay1 && rowsDay1.length === 1) {
+      console.log(`✓ Verificación DB: Exactamente ${rowsDay1.length} fila de edition_completed para ${testEditionDate1}.`);
+      summary.dbExactRowCount = true;
+    } else {
+      console.error(`❌ ERROR DB: Se esperaba exactamente 1 fila, se encontraron ${rowsDay1?.length ?? 0}.`, countError);
+      summary.dbExactRowCount = false;
+      executionFailed = true;
     }
-    console.log(`✓ Verificación DB: Exactamente ${rowsDay1.length} fila de edition_completed para ${testEditionDate1}.`);
 
     // -------------------------------------------------------------------------
-    // TEST D: Inserción para fecha diferente (Día 2)
+    // TEST D: HTTP POST para fecha diferente (Día 2)
     // -------------------------------------------------------------------------
-    console.log("\n--- TEST D: Inserción de edition_completed para fecha diferente (Día 2) ---");
-    const { error: day2Error } = await serviceClient.from("lumina_events").insert({
-      event_name: "edition_completed",
-      device_uuid: testDeviceUuid,
-      session_id: "test_sess_day2",
-      edition_date: testEditionDate2,
+    console.log(`\n--- 4. TEST D: HTTP POST para fecha diferente (${testEditionDate2}) ---`);
+    const resD = await fetch(`${baseUrl}/api/events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        event_name: "edition_completed",
+        device_uuid: testDeviceUuid,
+        session_id: "test_sess_day2",
+        edition_date: testEditionDate2,
+        metadata: { current_streak: 2 },
+      }),
     });
 
-    if (day2Error) {
-      console.error("❌ ERROR: No se pudo insertar evento para fecha distinta:", day2Error.message);
-      process.exit(1);
+    const bodyD = await resD.json().catch(() => null);
+    if (resD.status === 201 && bodyD?.ok === true) {
+      console.log(`✓ Inserción permitida para ${testEditionDate2}: Status 201 Created.`);
+
+      const { data: totalCompletions } = await serviceClient
+        .from("lumina_events")
+        .select("id, edition_date")
+        .eq("device_uuid", testDeviceUuid)
+        .eq("event_name", "edition_completed");
+
+      if (totalCompletions && totalCompletions.length === 2) {
+        console.log(`✓ Verificación DB: Total de 2 completions para fechas distintas.`);
+        summary.differentEditionDate = true;
+      } else {
+        console.error(`❌ ERROR DB: Se esperaban 2 completions, encontradas ${totalCompletions?.length ?? 0}.`);
+        summary.differentEditionDate = false;
+        executionFailed = true;
+      }
+    } else {
+      console.error(`❌ ERROR en POST /api/events para fecha distinta: Status ${resD.status}`, bodyD);
+      summary.differentEditionDate = false;
+      executionFailed = true;
     }
-    console.log(`✓ Inserción permitida para ${testEditionDate2}.`);
-
-    const { data: totalCompletions } = await serviceClient
-      .from("lumina_events")
-      .select("id, edition_date")
-      .eq("device_uuid", testDeviceUuid)
-      .eq("event_name", "edition_completed");
-
-    console.log(`✓ Verificación DB: Total de ${totalCompletions?.length} completions para fechas distintas.`);
-
+  } catch (err) {
+    console.error("❌ Excepción no controlada durante la verificación:", err);
+    executionFailed = true;
   } finally {
     // -------------------------------------------------------------------------
-    // TEST E: Limpieza de registros de prueba
+    // CLEANUP GARANTIZADO: Eliminar todos los registros de testDeviceUuid
     // -------------------------------------------------------------------------
-    console.log("\n--- TEST E: Limpieza de registros de prueba ---");
-    const { error: cleanupError } = await serviceClient
-      .from("lumina_events")
-      .delete()
-      .eq("device_uuid", testDeviceUuid);
+    console.log("\n--- 5. CLEANUP GARANTIZADO ---");
+    try {
+      const { error: cleanupError } = await serviceClient
+        .from("lumina_events")
+        .delete()
+        .eq("device_uuid", testDeviceUuid);
 
-    if (cleanupError) {
-      console.warn("⚠️ Advertencia al limpiar registros de prueba:", cleanupError.message);
-    } else {
-      console.log(`✓ Registros de prueba con device_uuid '${testDeviceUuid}' eliminados con éxito.`);
+      if (cleanupError) {
+        console.warn("⚠️ Advertencia en cleanup:", cleanupError.message);
+        summary.cleanup = false;
+      } else {
+        console.log(`✓ Registros con device_uuid '${testDeviceUuid}' eliminados con éxito.`);
+        summary.cleanup = true;
+      }
+    } catch (cleanErr) {
+      console.warn("⚠️ Excepción en cleanup:", cleanErr);
+      summary.cleanup = false;
+    }
+
+    // -------------------------------------------------------------------------
+    // OUTPUT FINAL RESUMIDO
+    // -------------------------------------------------------------------------
+    console.log("\n==================================================================");
+    console.log("  RESUMEN FINAL DE VERIFICACIÓN EN VIVO");
+    console.log("==================================================================");
+    console.log(`ANON DIRECT INSERT:       ${summary.anonDirectInsert ? "PASS" : "FAIL"}`);
+    console.log(`API NORMAL INSERT:        ${summary.apiNormalInsert ? "PASS" : "FAIL"}`);
+    console.log(`API CONCURRENT DEDUPE:    ${summary.apiConcurrentDedupe ? "PASS" : "FAIL"}`);
+    console.log(`DB EXACT ROW COUNT:       ${summary.dbExactRowCount ? "PASS" : "FAIL"}`);
+    console.log(`DIFFERENT EDITION DATE:   ${summary.differentEditionDate ? "PASS" : "FAIL"}`);
+    console.log(`CLEANUP:                  ${summary.cleanup ? "PASS" : "FAIL"}`);
+    console.log("==================================================================\n");
+
+    if (executionFailed || Object.values(summary).some((val) => val !== true)) {
+      process.exit(1);
     }
   }
-
-  console.log("\n==================================================================");
-  console.log("  VERIFICACIÓN LIVE COMPLETADA CON ÉXITO AL 100%");
-  console.log("==================================================================\n");
 }
 
-runLiveVerification().catch((err) => {
-  console.error("Error fatal en verificación live:", err);
-  process.exit(1);
-});
+runLiveVerification();
