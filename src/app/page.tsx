@@ -67,7 +67,7 @@ export default function Home() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
-    logLuminaEvent("session_started");
+    logLuminaEvent("session_started", { editionDate: getTodayDateString() });
 
     // Comprobar estado de racha y si ya completó hoy
     const streakState = getStreakState();
@@ -153,6 +153,8 @@ export default function Home() {
     );
   }
 
+  const currentLoadedEditionDate = stories[0]?.edition_date || getTodayDateString();
+
   // CASO DE REAPERTURA INSTANTÁNEA: Mostrar inmediatamente End State sin latencia de red
   if (isAlreadyCompletedToday) {
     return (
@@ -181,7 +183,12 @@ export default function Home() {
           </div>
         </header>
 
-        <EndOfFeed onReread={handleReread} isReopen={true} onEditionCompleted={handleEditionCompleted} />
+        <EndOfFeed
+          editionDate={currentLoadedEditionDate}
+          onReread={handleReread}
+          isReopen={true}
+          onEditionCompleted={handleEditionCompleted}
+        />
         <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
       </div>
     );
@@ -267,7 +274,7 @@ export default function Home() {
         </div>
 
         <div className="text-[11px] text-slate-400 text-center font-mono">
-          Lumina Core 0.3.4
+          Lumina Core 0.3.5
         </div>
       </div>
     );
@@ -322,7 +329,11 @@ export default function Home() {
             total={stories.length}
           />
         ))}
-        <EndOfFeed onReread={handleReread} onEditionCompleted={handleEditionCompleted} />
+        <EndOfFeed
+          editionDate={currentLoadedEditionDate}
+          onReread={handleReread}
+          onEditionCompleted={handleEditionCompleted}
+        />
       </main>
 
       {/* Modal de Ajustes */}

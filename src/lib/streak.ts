@@ -35,13 +35,11 @@ export function getTodayDateString(customDate?: Date): string {
 // Obtener el día de la semana (0 = Lunes, 6 = Domingo) en Europe/Madrid para una fecha YYYY-MM-DD
 export function getMadridDayOfWeekIndex(dateStr: string): number {
   const d = new Date(dateStr + "T12:00:00Z");
-  // Intl format en Europe/Madrid para obtener el nombre del día
   const formatter = new Intl.DateTimeFormat("en-US", {
     timeZone: "Europe/Madrid",
     weekday: "short",
   });
   const weekday = formatter.format(d).toLowerCase();
-  // Map: Mon -> 0, Tue -> 1, Wed -> 2, Thu -> 3, Fri -> 4, Sat -> 5, Sun -> 6
   const map: Record<string, number> = {
     mon: 0,
     tue: 1,
@@ -99,20 +97,20 @@ export function getWeekStatusForDate(
 }
 
 // Obtener estado actual de la racha desde localStorage
-export function getStreakState(): StreakState {
+export function getStreakState(referenceDate?: Date): StreakState {
+  const todayStr = getTodayDateString(referenceDate);
+
   if (typeof window === "undefined") {
-    const emptyToday = getTodayDateString();
     return {
       currentStreak: 0,
       lastCompletedDate: null,
       history: [],
       isNewStreak: false,
       completedToday: false,
-      weekStatus: getWeekStatusForDate(emptyToday, []),
+      weekStatus: getWeekStatusForDate(todayStr, []),
     };
   }
 
-  const todayStr = getTodayDateString();
   const lastDate = localStorage.getItem("lumina_last_completed_date");
   const storedStreak = parseInt(localStorage.getItem("lumina_streak_count") || "0", 10);
   
@@ -149,21 +147,26 @@ export function getStreakState(): StreakState {
   };
 }
 
-// Registrar finalización de edición y actualizar racha
-export function recordEditionCompleted(): StreakState {
+// Registrar finalización de edición y actualizar racha anclada a targetEditionDate
+export function recordEditionCompleted(
+  targetEditionDate?: string,
+  referenceDate?: Date
+): StreakState {
+  const todayStr = getTodayDateString(referenceDate);
+  const editionDate = targetEditionDate || todayStr;
+
   if (typeof window === "undefined") {
-    const todayStr = getTodayDateString();
+    const isToday = editionDate === todayStr;
     return {
       currentStreak: 1,
-      lastCompletedDate: todayStr,
-      history: [todayStr],
+      lastCompletedDate: editionDate,
+      history: [editionDate],
       isNewStreak: true,
-      completedToday: true,
-      weekStatus: getWeekStatusForDate(todayStr, [todayStr]),
+      completedToday: isToday,
+      weekStatus: getWeekStatusForDate(todayStr, [editionDate]),
     };
   }
 
-  const todayStr = getTodayDateString();
   const lastDate = localStorage.getItem("lumina_last_completed_date");
   const storedStreak = parseInt(localStorage.getItem("lumina_streak_count") || "0", 10);
   
@@ -177,14 +180,15 @@ export function recordEditionCompleted(): StreakState {
     history = [];
   }
 
-  // Si ya se completó hoy, no volver a incrementar
-  if (lastDate === todayStr) {
+  // Si ya se completó esta edición exacta, no volver a incrementar
+  if (lastDate === editionDate) {
+    const isToday = editionDate === todayStr;
     return {
       currentStreak: storedStreak,
       lastCompletedDate: lastDate,
       history,
       isNewStreak: false,
-      completedToday: true,
+      completedToday: isToday,
       weekStatus: getWeekStatusForDate(todayStr, history),
     };
   }
@@ -193,35 +197,36 @@ export function recordEditionCompleted(): StreakState {
   let isNewStreak = true;
 
   if (lastDate) {
-    const diff = getDaysDifference(lastDate, todayStr);
+    const diff = getDaysDifference(lastDate, editionDate);
     if (diff === 1) {
-      // Día consecutivo: racha +1
+      // Día consecutivo respecto a la fecha de la edición completada
       newStreak = storedStreak + 1;
       isNewStreak = false;
     } else {
-      // Se saltó uno o más días: nueva racha comenzando en 1
+      // Se saltó uno o más días
       newStreak = 1;
       isNewStreak = true;
     }
   }
 
   // Guardar historial de fechas completadas (últimos 60 días)
-  const updatedHistory = [...history.filter((d) => d !== todayStr), todayStr].slice(-60);
+  const updatedHistory = [...history.filter((d) => d !== editionDate), editionDate].slice(-60);
 
   // Persistir en localStorage
   localStorage.setItem("lumina_streak_count", newStreak.toString());
-  localStorage.setItem("lumina_last_completed_date", todayStr);
+  localStorage.setItem("lumina_last_completed_date", editionDate);
   localStorage.setItem("lumina_streak_history", JSON.stringify(updatedHistory));
-  localStorage.setItem("lumina_last_completed_edition", todayStr);
+  localStorage.setItem("lumina_last_completed_edition", editionDate);
 
+  const isToday = editionDate === todayStr;
   const weekStatus = getWeekStatusForDate(todayStr, updatedHistory);
 
   return {
     currentStreak: newStreak,
-    lastCompletedDate: todayStr,
+    lastCompletedDate: editionDate,
     history: updatedHistory,
     isNewStreak,
-    completedToday: true,
+    completedToday: isToday,
     weekStatus,
   };
 }

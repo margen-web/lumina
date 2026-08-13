@@ -7,12 +7,13 @@ import { logLuminaEvent } from "@/lib/analytics";
 import { recordEditionCompleted, getStreakState, StreakState } from "@/lib/streak";
 
 interface EndOfFeedProps {
+  editionDate?: string;
   onReread?: () => void;
   isReopen?: boolean;
   onEditionCompleted?: (streak: StreakState) => void;
 }
 
-export function EndOfFeed({ onReread, isReopen, onEditionCompleted }: EndOfFeedProps) {
+export function EndOfFeed({ editionDate, onReread, isReopen, onEditionCompleted }: EndOfFeedProps) {
   const hasLoggedComplete = useRef(false);
   const [streakInfo, setStreakInfo] = useState<StreakState>(() => {
     return getStreakState();
@@ -28,16 +29,17 @@ export function EndOfFeed({ onReread, isReopen, onEditionCompleted }: EndOfFeedP
         if (entries[0].isIntersecting && !hasLoggedComplete.current) {
           hasLoggedComplete.current = true;
           
-          // Actualizar racha de luz y semana
-          const updatedStreak = recordEditionCompleted();
+          // Actualizar racha de luz y semana anclada a la edition_date de las noticias cargadas
+          const updatedStreak = recordEditionCompleted(editionDate);
           setStreakInfo(updatedStreak);
 
           if (onEditionCompleted) {
             onEditionCompleted(updatedStreak);
           }
 
-          // Registrar evento analítico con racha actual
+          // Registrar evento analítico con racha actual y editionDate explícita
           logLuminaEvent("edition_completed", {
+            editionDate,
             metadata: {
               current_streak: updatedStreak.currentStreak,
               is_new_streak: updatedStreak.isNewStreak,
@@ -61,7 +63,7 @@ export function EndOfFeed({ onReread, isReopen, onEditionCompleted }: EndOfFeedP
     if (el) observer.observe(el);
 
     return () => observer.disconnect();
-  }, [isReopen, onEditionCompleted]);
+  }, [isReopen, editionDate, onEditionCompleted]);
 
   const streak = streakInfo.currentStreak || 1;
   const isNew = streakInfo.isNewStreak;
@@ -159,7 +161,7 @@ export function EndOfFeed({ onReread, isReopen, onEditionCompleted }: EndOfFeedP
           <a href="/privacidad" className="hover:text-[var(--heading)] transition-colors hover:underline">
             Privacidad
           </a>
-          <span className="font-mono text-[10px]">v0.3.3</span>
+          <span className="font-mono text-[10px]">v0.3.5</span>
         </div>
 
       </div>

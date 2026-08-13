@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { supabaseServer } from "@/lib/supabase-server";
 import { getTodayDateString } from "@/lib/streak";
 
-// In-memory sliding window rate limiter
+// In-memory sliding window rate limiter (best-effort en edge/node)
 interface RateLimitEntry {
   count: number;
   resetTime: number;
@@ -37,7 +37,7 @@ const ALLOWED_EVENTS = new Set([
 
 export async function POST(request: NextRequest) {
   try {
-    // 1. Obtener identificador de origen para Rate Limiting
+    // 1. Rate Limiting de origen
     const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || 
                request.headers.get("x-real-ip") || 
                "anonymous-client";
@@ -105,24 +105,8 @@ export async function POST(request: NextRequest) {
       ? edition_date
       : getTodayDateString();
 
-    // 5. Deduplicación Server-Side Estricta para edition_completed (máx 1 por device_uuid y edition_date)
-    if (event_name === "edition_completed") {
-      const { data: existingEvents, error: checkError } = await supabase
-        .from("lumina_events")
-        .select("id")
-        .eq("event_name", "edition_completed")
-        .eq("device_uuid", device_uuid)
-        .eq("edition_date", validatedDate)
-        .limit(1);
-
-      if (!checkError && existingEvents && existingEvents.length > 0) {
-        // Ya registrado hoy para este dispositivo: responder éxito deduplicado sin insertar duplicados
-        return NextResponse.json({ ok: true, deduplicated: true }, { status: 200 });
-      }
-    }
-
-    // 6. Inserción segura y controlada en Supabase
-    const { error: dbError } = await supabase.from("lumina_events").insert({
+    // 5. Inserción atómica mediante supabaseServer con manejo de Unique Constraint (code 23505)
+    const { error: dbError } = await supabaseServer.from("lumina_events").insert({
       event_name,
       device_uuid,
       session_id,
@@ -133,6 +117,11 @@ export async function POST(request: NextRequest) {
     });
 
     if (dbError) {
+      // Código PostgreSQL 23505: unique_violation (Deduplicación atómica de edition_completed)
+      if (dbError.code === "23505") {
+        return NextResponse.json({ ok: true, deduplicated: true }, { status: 200 });
+      }
+
       console.error("Database event insertion error:", dbError.message);
       return NextResponse.json({ error: "Failed to persist event" }, { status: 500 });
     }
