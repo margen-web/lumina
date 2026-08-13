@@ -128,11 +128,11 @@ console.log("✓ 2.2: El día 14 NO queda marcado como completado");
 console.log("✓ 2.3: La racha se actualiza con base en la edición leída");
 
 // -----------------------------------------------------------------------------
-// 3. ATOMIC DEDUPLICATION LOGIC (POSTGRES CODE 23505)
+// 3. SIMULACIÓN UNITARIA DE DEDUPLICACIÓN (UNIT SIMULATION / ROUTE HANDLER LOGIC)
+// Nota: La concurrencia real de PostgreSQL se comprueba con scripts/verify-analytics-security.ts
 // -----------------------------------------------------------------------------
-console.log("\n--- 3. DEDUPLICACIÓN ATÓMICA DE EDITION_COMPLETED ---");
+console.log("\n--- 3. SIMULACIÓN UNITARIA DE DEDUPLICACIÓN (ROUTE HANDLER 23505 LOGIC) ---");
 
-// Simular el manejador de la base de datos para inserciones concurrentes
 function simulateEventInsertion(
   existingRecords: Array<{ device_uuid: string; edition_date: string; event_name: string }>,
   newRecord: { device_uuid: string; edition_date: string; event_name: string }
@@ -146,7 +146,7 @@ function simulateEventInsertion(
   );
 
   if (isDuplicate) {
-    // Código Postgres 23505 (unique_violation)
+    // Simula captura de PostgreSQL unique_violation code 23505 en /api/events
     return { ok: true, deduplicated: true, status: 200 };
   }
 
@@ -165,7 +165,7 @@ const req1 = simulateEventInsertion(mockDbEvents, {
 assert.strictEqual(req1.status, 201);
 assert.strictEqual(req1.deduplicated, false);
 assert.strictEqual(mockDbEvents.length, 1);
-console.log("✓ 3.1: Primer request -> Insertado (201 Created)");
+console.log("✓ 3.1: [Simulación Unitaria] Primer request -> 201 Created");
 
 // Request 2: Request concurrente o relectura para el mismo día
 const req2 = simulateEventInsertion(mockDbEvents, {
@@ -175,10 +175,10 @@ const req2 = simulateEventInsertion(mockDbEvents, {
 });
 assert.strictEqual(req2.status, 200);
 assert.strictEqual(req2.deduplicated, true);
-assert.strictEqual(mockDbEvents.length, 1, "La DB debe conservar exactamente 1 fila");
-console.log("✓ 3.2: Request duplicado concurrente -> Atómicamente deduplicado (200 OK, 1 sola fila en DB)");
+assert.strictEqual(mockDbEvents.length, 1);
+console.log("✓ 3.2: [Simulación Unitaria] Request concurrente -> Manejado con 200 OK deduplicated");
 
-// Request 3: Completion del día siguiente (14) para el mismo device
+// Request 3: Completion de otra fecha para el mismo device
 const req3 = simulateEventInsertion(mockDbEvents, {
   device_uuid: "device_abc",
   edition_date: "2026-08-14",
@@ -186,8 +186,8 @@ const req3 = simulateEventInsertion(mockDbEvents, {
 });
 assert.strictEqual(req3.status, 201);
 assert.strictEqual(req3.deduplicated, false);
-assert.strictEqual(mockDbEvents.length, 2, "Días distintos deben persistir dos filas independientes");
-console.log("✓ 3.3: Edición de fecha diferente (2026-08-14) -> Insertada correctamente (2 filas en total)");
+assert.strictEqual(mockDbEvents.length, 2);
+console.log("✓ 3.3: [Simulación Unitaria] Fecha diferente (2026-08-14) -> Permitida e insertada (201)");
 
 // -----------------------------------------------------------------------------
 // 4. DST & TIMEZONE TESTS EN EUROPE/MADRID (src/lib/streak.ts)
@@ -236,5 +236,5 @@ assert.strictEqual(getDaysDifference("2026-08-12", "2026-08-13"), 1);
 console.log("✓ 5.1: Semana L, M, J completados -> [true, true, false, true, false, false, false]");
 
 console.log("\n==================================================================");
-console.log("  TODAS LAS PRUEBAS (EDICIÓN, DST, DEDUPE, MIDNIGHT) PASARON (100%)");
+console.log("  TODAS LAS PRUEBAS DE CÓDIGO PASARON EXITOSAMENTE (100%)");
 console.log("==================================================================\n");

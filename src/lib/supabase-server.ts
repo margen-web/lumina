@@ -1,22 +1,42 @@
-import { createClient } from "@supabase/supabase-js";
+import "server-only";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 /**
- * SERVER-ONLY SUPABASE CLIENT:
- * Este cliente se ejecuta exclusivamente en el entorno de servidor (Next.js Route Handlers / Server Actions).
- * Utiliza SUPABASE_SERVICE_ROLE_KEY para realizar inserciones autorizadas de analytics y bypass de RLS controlado.
- * NUNCA importar este módulo en componentes de cliente (React Client Components).
+ * SERVER-ONLY SUPABASE CLIENT (FAIL-CLOSED):
+ * Este cliente se ejecuta exclusivamente en el entorno de servidor (Next.js Route Handlers).
+ * Exige estrictamente SUPABASE_SERVICE_ROLE_KEY para realizar inserciones autorizadas de analytics.
+ * NUNCA utiliza credenciales anónimas públicas como fallback.
+ * Si falta la clave de servicio en tiempo de ejecución, falla inmediatamente y de forma explícita.
  */
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "";
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+let serverClientInstance: SupabaseClient | null = null;
 
-if (!supabaseUrl) {
-  console.warn("SERVER WARNING: Supabase URL no configurada en entorno de servidor.");
+export function getSupabaseServer(): SupabaseClient {
+  if (serverClientInstance) {
+    return serverClientInstance;
+  }
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl) {
+    throw new Error(
+      "SERVER CONFIG ERROR: Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_URL environment variable."
+    );
+  }
+
+  if (!supabaseServiceRoleKey) {
+    throw new Error(
+      "SERVER SECURITY ERROR: Missing SUPABASE_SERVICE_ROLE_KEY. The server analytics client requires explicit service_role credentials and fails closed."
+    );
+  }
+
+  serverClientInstance = createClient(supabaseUrl, supabaseServiceRoleKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
+
+  return serverClientInstance;
 }
-
-export const supabaseServer = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-  },
-});

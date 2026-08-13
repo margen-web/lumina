@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabase-server";
+import { getSupabaseServer } from "@/lib/supabase-server";
 import { getTodayDateString } from "@/lib/streak";
 
 // In-memory sliding window rate limiter (best-effort en edge/node)
@@ -105,7 +105,10 @@ export async function POST(request: NextRequest) {
       ? edition_date
       : getTodayDateString();
 
-    // 5. Inserción atómica mediante supabaseServer con manejo de Unique Constraint (code 23505)
+    // 5. Obtener cliente server-only (falla explícitamente si falta SUPABASE_SERVICE_ROLE_KEY)
+    const supabaseServer = getSupabaseServer();
+
+    // Inserción atómica con manejo de Unique Constraint (code 23505)
     const { error: dbError } = await supabaseServer.from("lumina_events").insert({
       event_name,
       device_uuid,
