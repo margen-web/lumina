@@ -1,4 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
+import * as fs from "node:fs";
+import * as path from "node:path";
 
 /**
  * LIVE VERIFICATION HARNESS: END-TO-END ANALYTICS SECURITY & ATOMIC DEDUPLICATION
@@ -12,10 +14,32 @@ import { createClient } from "@supabase/supabase-js";
  * 6. Cleanup -> Limpieza garantizada en bloque finally usando serviceClient.
  * 
  * Uso:
- * LUMINA_BASE_URL="http://localhost:3000" npx tsx scripts/verify-analytics-security.ts
+ * npx tsx scripts/verify-analytics-security.ts
  * o contra preview:
  * LUMINA_BASE_URL="https://lumina-preview-url.vercel.app" npx tsx scripts/verify-analytics-security.ts
  */
+
+// Carga automática de .env.local si existe y faltan variables en el entorno
+function loadLocalEnvIfPresent() {
+  const envPath = path.resolve(process.cwd(), ".env.local");
+  if (fs.existsSync(envPath)) {
+    const content = fs.readFileSync(envPath, "utf-8");
+    for (const line of content.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eqIdx = trimmed.indexOf("=");
+      if (eqIdx !== -1) {
+        const key = trimmed.substring(0, eqIdx).trim();
+        const val = trimmed.substring(eqIdx + 1).trim();
+        if (!process.env[key]) {
+          process.env[key] = val;
+        }
+      }
+    }
+  }
+}
+
+loadLocalEnvIfPresent();
 
 const rawBaseUrl = process.env.LUMINA_BASE_URL || "http://localhost:3000";
 const baseUrl = rawBaseUrl.replace(/\/+$/, "");
