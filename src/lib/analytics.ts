@@ -1,42 +1,106 @@
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://btyfqihnriqlobxcbvno.supabase.co";
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ0eWZxaWhucmlxbG9ieGNidm5vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1MjA4MDcsImV4cCI6MjA5NDA5NjgwN30.P5b8vV_roeN0PsCJpGwua8XyPrK2T8DlsKGSvALI_5U";
+import { supabase } from "./supabase";
 
-// Generar u obtener un identificador único anónimo del dispositivo
+export type LuminaEventName =
+  | "session_started"
+  | "story_viewed"
+  | "story_completed"
+  | "evidence_opened"
+  | "evidence_closed"
+  | "source_clicked"
+  | "story_shared"
+  | "edition_completed";
+
+// Generar u obtener un identificador único anónimo persistente del dispositivo
 export function getOrCreateDeviceUuid(): string {
   if (typeof window === "undefined") return "";
   let uuid = localStorage.getItem("lumina_device_uuid");
   if (!uuid) {
-    // Usar crypto.randomUUID si está disponible, o un fallback matemático
-    uuid = typeof crypto !== "undefined" && crypto.randomUUID 
-      ? crypto.randomUUID() 
-      : Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+    uuid = typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : "dev_" + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
     localStorage.setItem("lumina_device_uuid", uuid);
   }
   return uuid;
 }
 
-// Registrar un evento anónimo en la base de datos de Supabase
-export async function logLuminaEvent(eventName: string, newsId?: string) {
+// Generar u obtener un identificador de sesión temporal
+export function getOrCreateSessionId(): string {
+  if (typeof window === "undefined") return "";
+  let sid = sessionStorage.getItem("lumina_session_id");
+  if (!sid) {
+    sid = "sess_" + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+    sessionStorage.setItem("lumina_session_id", sid);
+  }
+  return sid;
+}
+
+// Control de tasa y deduplicación en memoria para mitigar abusos
+const recentEvents = new Set<string>();
+let eventCountInWindow = 0;
+let windowStartTime = Date.now();
+
+const MAX_EVENTS_PER_MINUTE = 40;
+
+export async function logLuminaEvent(
+  eventName: LuminaEventName,
+  payload?: {
+    storyId?: string;
+    position?: number;
+    editionDate?: string;
+    sourceType?: string;
+    method?: string;
+    metadata?: Record<string, unknown>;
+  }
+) {
+  if (typeof window === "undefined") return;
+
   const deviceUuid = getOrCreateDeviceUuid();
-  if (!deviceUuid) return;
+  const sessionId = getOrCreateSessionId();
+  if (!deviceUuid || !sessionId) return;
+
+  // Control de tasa por minuto
+  const now = Date.now();
+  if (now - windowStartTime > 60000) {
+    windowStartTime = now;
+    eventCountInWindow = 0;
+  }
+  if (eventCountInWindow >= MAX_EVENTS_PER_MINUTE) {
+    return;
+  }
+  eventCountInWindow++;
+
+  // Clave de deduplicación para eventos idénticos en la misma sesión
+  const dedupKey = `${eventName}_${payload?.storyId || ""}_${payload?.position || ""}`;
+  if (
+    eventName === "session_started" ||
+    eventName === "edition_completed" ||
+    eventName === "story_viewed"
+  ) {
+    if (recentEvents.has(dedupKey)) {
+      return;
+    }
+    recentEvents.add(dedupKey);
+  }
 
   try {
-    // Ejecutar de forma no bloqueante
-    fetch(`${SUPABASE_URL}/rest/v1/lumina_events`, {
-      method: "POST",
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        "Content-Type": "application/json",
-        Prefer: "return=minimal",
+    const { error } = await supabase.from("lumina_events").insert({
+      event_name: eventName,
+      device_uuid: deviceUuid,
+      session_id: sessionId,
+      news_id: payload?.storyId || null,
+      position: payload?.position ?? null,
+      edition_date: payload?.editionDate || new Date().toISOString().split("T")[0],
+      metadata: {
+        source_type: payload?.sourceType,
+        method: payload?.method,
+        ...payload?.metadata,
       },
-      body: JSON.stringify({
-        event_name: eventName,
-        news_id: newsId || null,
-        device_uuid: deviceUuid,
-      }),
-    }).catch(e => console.error("Error logging event:", e));
+    });
+
+    if (error) {
+      console.warn("Analytics log warning:", error.message);
+    }
   } catch (err) {
-    console.error("Failed to log analytics event:", err);
+    console.warn("Failed to record analytics event:", err);
   }
 }

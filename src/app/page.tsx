@@ -1,184 +1,138 @@
 "use client";
 
 import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
-import { Flame, Sun, Moon, Sparkles, Volume2, VolumeX } from "lucide-react";
-import { useStreak } from "@/hooks/useStreak";
+import { useEffect, useState, useRef } from "react";
+import { Sun, Moon, Loader2 } from "lucide-react";
 import { ProgressBar } from "@/components/progress-bar";
-import { NewsCard, NewsItem } from "@/components/news-card";
+import { NewsCard } from "@/components/news-card";
 import { EndOfFeed } from "@/components/end-of-feed";
-import { FloatingParticles } from "@/components/floating-particles";
+import { StoryItem, supabase } from "@/lib/supabase";
 import { logLuminaEvent } from "@/lib/analytics";
 
-// 5 Noticias Positivas Reales Mockeadas
-const MOCK_NEWS = [
+const FALLBACK_STORIES: StoryItem[] = [
   {
-    id: "1",
-    category: "Naturaleza",
-    title: "La población de pandas gigantes salvajes crece un 20% tras décadas de conservación",
-    summary: "Gracias a los esfuerzos de reforestación y la protección legal de los bosques de bambú, los osos panda salvajes han aumentado su número de forma constante y salen oficialmente del peligro de extinción crítica.",
-    sourceUrl: "https://www.worldwildlife.org",
+    id: "story-1",
+    edition_date: "2026-08-13",
+    edition_position: 1,
+    status: "published",
+    category: "Energía & Clima",
+    headline: "Portugal cubre el 88% de su demanda eléctrica nacional con energía renovable durante un trimestre récord",
+    what_changed: "La red eléctrica portuguesa ha alcanzado un nuevo máximo histórico gracias a la generación hidroeléctrica, eólica marina y solar coordinada.",
+    why_it_matters: "Demuestra a escala de un país entero que una economía industrializada puede operar de forma estable dependiendo casi en su totalidad de fuentes limpias.",
+    evidence: "Datos oficiales de la Red Energética Nacional (REN) registraron 14.8 TWh generados sin combustibles fósiles en el periodo analizado.",
+    evidence_metric: "88%",
+    evidence_metric_label: "demanda eléctrica limpia",
+    caveat: "Aún persisten picos de demanda en meses de sequía que requieren respaldo temporal de ciclos combinados de gas y mayor capacidad de baterías.",
+    primary_source_name: "Rede Eléctrica Nacional (REN)",
+    primary_source_url: "https://www.ren.pt",
+    primary_source_type: "official_data",
   },
   {
-    id: "2",
-    category: "Ciencia",
-    title: "Descubren una enzima bacteriana que descompone plásticos en cuestión de horas",
-    summary: "Científicos han perfeccionado una enzima capaz de disolver botellas de PET comunes a nivel molecular en tiempo récord. Abre la puerta a un reciclaje industrial infinito y 100% limpio.",
-    sourceUrl: "https://www.nature.com",
+    id: "story-2",
+    edition_date: "2026-08-13",
+    edition_position: 2,
+    status: "published",
+    category: "Ciencia & Salud",
+    headline: "Un ensayo en fase 3 logra reducir en un 73% la recaída en leucemia linfoblástica aguda en adultos jóvenes",
+    what_changed: "Investigadores han demostrado que combinar terapia dirigida con células CAR-T antes del trasplante previene de forma drástica el escape tumoral.",
+    why_it_matters: "Ofrece una opción curativa a pacientes que no respondían a los esquemas convencionales de quimioterapia intensiva.",
+    evidence: "Estudio multicéntrico publicado en The New England Journal of Medicine con 420 pacientes y seguimiento a 36 meses.",
+    evidence_metric: "-73%",
+    evidence_metric_label: "tasa de recaídas a 3 años",
+    caveat: "El tratamiento conlleva riesgo de síndrome de liberación de citoquinas en el 12% de los casos y su elevado coste actual limita su despliegue global.",
+    primary_source_name: "The New England Journal of Medicine",
+    primary_source_url: "https://www.nejm.org",
+    primary_source_type: "scientific_paper",
   },
   {
-    id: "3",
-    category: "Sociedad",
-    title: "Un pueblo de Alicante logra un récord de reciclaje premiando a sus vecinos",
-    summary: "El sistema de puntos intercambiables por vales de comercio local en comercios locales ha impulsado la tasa de separación de residuos al 92%, reactivando además la economía de la comunidad.",
-    sourceUrl: "https://www.elpais.com",
+    id: "story-3",
+    edition_date: "2026-08-13",
+    edition_position: 3,
+    status: "published",
+    category: "Biodiversidad & Océanos",
+    headline: "La mayor reserva marina del Atlántico Sur recupera un 45% de la biomasa de peces depredadores tras cinco años de protección",
+    what_changed: "El cese absoluto de la pesca de arrastre industrial en Tristán de Acuña ha permitido una regeneración biológica acelerada en atunes y tiburones.",
+    why_it_matters: "Confirma que las zonas de veda estricta aceleran la repoblación de los océanos a un ritmo el doble de rápido de lo previsto.",
+    evidence: "Monitorización acústica y censos por satélite auditados por el British Antarctic Survey y National Geographic Pristine Seas.",
+    evidence_metric: "+45%",
+    evidence_metric_label: "recuperación de biomasa marina",
+    caveat: "La vigilancia de un área de 687.000 km² sigue siendo vulnerable a la pesca pirata internacional no declarada en los márgenes de la reserva.",
+    primary_source_name: "National Geographic Pristine Seas / BAS",
+    primary_source_url: "https://www.nationalgeographic.org/society/projects/pristine-seas/",
+    primary_source_type: "NGO_report",
   },
   {
-    id: "4",
-    category: "Salud",
-    title: "Un nuevo tratamiento logra la remisión completa de leucemia en ensayos clínicos",
-    summary: "Una terapia avanzada con células CAR-T modificadas genéticamente consigue curar a pacientes que no respondían a la quimio. El tratamiento ha sido aprobado para su distribución hospitalaria.",
-    sourceUrl: "https://www.nejm.org",
+    id: "story-4",
+    edition_date: "2026-08-13",
+    edition_position: 4,
+    status: "published",
+    category: "Tecnología Útil",
+    headline: "Desarrollan una membrana de desalinización solar pasiva con un 94% de eficiencia y cero residuos tóxicos",
+    what_changed: "Ingenieros del MIT han diseñado un dispositivo flotante que utiliza convección capilar para evaporar y condensar agua marina sin acumular sal.",
+    why_it_matters: "Permite producir agua potable de bajo coste en comunidades costeras e islas sin requerir conexión eléctrica ni costosas bombas de presión.",
+    evidence: "Pruebas de campo continuas durante 6 meses produjeron 5.8 litros de agua pura por metro cuadrado por hora de sol.",
+    evidence_metric: "5.8 L/m²",
+    evidence_metric_label: "agua potable por hora de sol",
+    caveat: "La durabilidad de los polímeros frente a la acumulación bacteriana a escala de varios años aún no ha sido ensayada en aguas tropicales.",
+    primary_source_name: "MIT News / Nature Communications",
+    primary_source_url: "https://news.mit.edu",
+    primary_source_type: "university",
   },
   {
-    id: "5",
-    category: "Tecnología",
-    title: "Crean tejas solares baratas que pueden abastecer de luz gratis a hogares vulnerables",
-    summary: "Una startup hispana patenta unas tejas de arcilla combinadas con silicio que reducen el coste de la energía solar doméstica un 60%, facilitando su instalación en zonas de bajos ingresos.",
-    sourceUrl: "https://www.technologyreview.com",
+    id: "story-5",
+    edition_date: "2026-08-13",
+    edition_position: 5,
+    status: "published",
+    category: "Sociedad & Educación",
+    headline: "La tasa de analfabetismo infantil en zonas rurales de Latinoamérica cae al nivel más bajo registrado por tutorías intensivas",
+    what_changed: "La implementación de apoyo pedagógico individualizado en escuelas públicas de Brasil, Colombia y Perú ha beneficiado a 2.3 millones de niños.",
+    why_it_matters: "Aprender a leer con fluidez antes de los 9 años es el predictor más determinante para evitar el abandono escolar y romper la pobreza intergeneracional.",
+    evidence: "Informe de evaluación de impacto del Banco Interamericano de Desarrollo (BID) y UNESCO con grupo de control aleatorizado.",
+    evidence_metric: "2.3M",
+    evidence_metric_label: "niños con competencia lectora",
+    caveat: "Persisten grandes disparidades de conectividad y formación docente en regiones indígenas remotas que aún no tienen acceso al programa.",
+    primary_source_name: "UNESCO / BID",
+    primary_source_url: "https://www.unesco.org",
+    primary_source_type: "public_institution",
   },
 ];
 
-const CATEGORY_GRADIENTS = {
-  0: "from-emerald-500/10 via-teal-500/5 to-slate-900/10 dark:from-emerald-950/20 dark:via-teal-950/10 dark:to-slate-950",
-  1: "from-blue-500/10 via-cyan-500/5 to-slate-900/10 dark:from-blue-950/20 dark:via-cyan-950/10 dark:to-slate-950",
-  2: "from-orange-500/10 via-amber-500/5 to-slate-900/10 dark:from-orange-950/20 dark:via-amber-950/10 dark:to-slate-950",
-  3: "from-rose-500/10 via-pink-500/5 to-slate-900/10 dark:from-rose-950/20 dark:via-pink-950/10 dark:to-slate-950",
-  4: "from-indigo-500/10 via-violet-500/5 to-slate-900/10 dark:from-indigo-950/20 dark:via-violet-950/10 dark:to-slate-950",
-  5: "from-yellow-500/10 via-amber-500/5 to-slate-900/10 dark:from-yellow-950/20 dark:via-amber-950/10 dark:to-slate-950",
-} as const;
-
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://btyfqihnriqlobxcbvno.supabase.co";
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ0eWZxaWhucmlxbG9ieGNidm5vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1MjA4MDcsImV4cCI6MjA5NDA5NjgwN30.P5b8vV_roeN0PsCJpGwua8XyPrK2T8DlsKGSvALI_5U";
-
 export default function Home() {
-  const { streak, isMounted } = useStreak();
   const { theme, setTheme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [audioEnabled, setAudioEnabled] = useState(false);
-  const [reactions, setReactions] = useState<{ [newsId: string]: number }>({});
-  const [userReactions, setUserReactions] = useState<string[]>([]);
-  const [newsList, setNewsList] = useState<NewsItem[]>(MOCK_NEWS);
-  const [viewedCards, setViewedCards] = useState<string[]>([]);
-
-  const [audio] = useState(() => {
-    if (typeof Audio !== "undefined") {
-      const a = new Audio("https://assets.mixkit.co/music/preview/mixkit-zen-meditation-625.mp3");
-      a.loop = true;
-      a.volume = 0.15;
-      return a;
-    }
-    return null;
-  });
+  const [stories, setStories] = useState<StoryItem[]>(FALLBACK_STORIES);
+  const [isLoading, setIsLoading] = useState(true);
+  const viewedStoryIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
-    logLuminaEvent("page_view");
+    logLuminaEvent("session_started");
 
-    const hasSeen = localStorage.getItem("has_seen_onboarding");
-    if (!hasSeen) {
-      setShowOnboarding(true);
-    }
-
-    const savedAudio = localStorage.getItem("audio_enabled");
-    if (savedAudio === "true") {
-      setAudioEnabled(true);
-    }
-
-    // Load user reactions from localStorage
-    const savedReactions = localStorage.getItem("lumina_user_reactions");
-    if (savedReactions) {
+    const fetchStories = async () => {
       try {
-        setUserReactions(JSON.parse(savedReactions));
-      } catch (e) {
-        console.error("Error parsing user reactions:", e);
-      }
-    }
+        const { data, error } = await supabase
+          .from("lumina_stories")
+          .select("*")
+          .eq("status", "published")
+          .order("edition_position", { ascending: true })
+          .limit(5);
 
-    // Fetch initial reactions count from Supabase
-    const loadReactions = async () => {
-      try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/lumina_reactions?select=news_id,count`, {
-          headers: {
-            apikey: SUPABASE_ANON_KEY,
-            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          const counts: { [newsId: string]: number } = {};
-          data.forEach((row: { news_id: string; count: number }) => {
-            counts[row.news_id] = row.count;
-          });
-          setReactions(counts);
+        if (!error && data && data.length > 0) {
+          setStories(data as StoryItem[]);
         }
       } catch (err) {
-        console.error("Error loading reactions:", err);
+        console.warn("Using fallback stories:", err);
+      } finally {
+        setIsLoading(false);
       }
     };
 
-    // Fetch initial daily news list from Supabase
-    const loadNews = async () => {
-      try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/lumina_news?select=id,category,title,summary,source_url&order=id.asc`, {
-          headers: {
-            apikey: SUPABASE_ANON_KEY,
-            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.length > 0) {
-            const mappedData: NewsItem[] = data.map((item: {
-              id: string;
-              category: string;
-              title: string;
-              summary: string;
-              source_url: string;
-            }) => ({
-              id: item.id,
-              category: item.category,
-              title: item.title,
-              summary: item.summary,
-              sourceUrl: item.source_url,
-            }));
-            setNewsList(mappedData);
-          }
-        }
-      } catch (err) {
-        console.error("Error loading news from Supabase:", err);
-      }
-    };
-
-    loadReactions();
-    loadNews();
+    fetchStories();
   }, []);
 
-  useEffect(() => {
-    if (!audio) return;
-    if (audioEnabled) {
-      audio.play().catch((err) => console.log("Audio playback failed:", err));
-    } else {
-      audio.pause();
-    }
-    return () => {
-      audio.pause();
-    };
-  }, [audioEnabled, audio]);
-
+  // IntersectionObserver para detectar la historia activa y registrar story_viewed
   useEffect(() => {
     if (!mounted) return;
     const mainElement = document.querySelector("main");
@@ -190,6 +144,18 @@ export default function Home() {
           if (entry.isIntersecting) {
             const index = parseInt(entry.target.getAttribute("data-index") || "0", 10);
             setActiveIndex(index);
+
+            if (index < stories.length) {
+              const currentStory = stories[index];
+              if (currentStory && !viewedStoryIds.current.has(currentStory.id)) {
+                viewedStoryIds.current.add(currentStory.id);
+                logLuminaEvent("story_viewed", {
+                  storyId: currentStory.id,
+                  position: index + 1,
+                  editionDate: currentStory.edition_date,
+                });
+              }
+            }
           }
         });
       },
@@ -203,85 +169,19 @@ export default function Home() {
     cards.forEach((card) => observer.observe(card));
 
     return () => observer.disconnect();
-  }, [mounted]);
+  }, [mounted, stories]);
 
-  // Vibración táctil suave en cambio de noticia
+  // Vibración táctil discreta al cambiar de historia
   useEffect(() => {
     if (activeIndex > 0 && typeof navigator !== "undefined" && navigator.vibrate) {
-      navigator.vibrate(15);
+      navigator.vibrate(12);
     }
   }, [activeIndex]);
 
-  // Registrar evento de noticia vista de forma única por sesión
-  useEffect(() => {
-    if (newsList.length > 0 && activeIndex < newsList.length) {
-      const currentNews = newsList[activeIndex];
-      if (currentNews && !viewedCards.includes(currentNews.id)) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setViewedCards((prev) => [...prev, currentNews.id]);
-        logLuminaEvent("news_view", currentNews.id);
-      }
-    }
-  }, [activeIndex, newsList, viewedCards]);
-
-  const toggleAudio = () => {
-    if (typeof navigator !== "undefined" && navigator.vibrate) {
-      navigator.vibrate(20);
-    }
-    const nextState = !audioEnabled;
-    setAudioEnabled(nextState);
-    localStorage.setItem("audio_enabled", nextState.toString());
-  };
-
-  const handleToggleReaction = async (newsId: string) => {
-    const hasReacted = userReactions.includes(newsId);
-    let updatedUserReactions: string[];
-
-    if (hasReacted) {
-      updatedUserReactions = userReactions.filter((id) => id !== newsId);
-    } else {
-      updatedUserReactions = [...userReactions, newsId];
-    }
-
-    setUserReactions(updatedUserReactions);
-    localStorage.setItem("lumina_user_reactions", JSON.stringify(updatedUserReactions));
-
-    setReactions((prev) => ({
-      ...prev,
-      [newsId]: Math.max(0, (prev[newsId] || 0) + (hasReacted ? -1 : 1)),
-    }));
-
-    if (typeof navigator !== "undefined" && navigator.vibrate) {
-      navigator.vibrate(30);
-    }
-
-    const endpoint = hasReacted ? "decrement_lumina_reaction" : "increment_lumina_reaction";
-    try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${endpoint}`, {
-        method: "POST",
-        headers: {
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ news_id_param: newsId }),
-      });
-      if (res.ok) {
-        const newCount = await res.json();
-        setReactions((prev) => ({
-          ...prev,
-          [newsId]: newCount,
-        }));
-      }
-    } catch (err) {
-      console.error("Failed to sync reaction with database:", err);
-    }
-  };
-
-  if (!mounted) {
+  if (!mounted || isLoading) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-[var(--background)]">
-        <Sparkles className="w-10 h-10 animate-spin text-primary-DEFAULT" />
+        <Loader2 className="w-8 h-8 animate-spin text-primary-DEFAULT" />
       </div>
     );
   }
@@ -289,58 +189,29 @@ export default function Home() {
   const currentTheme = theme === "system" ? resolvedTheme : theme;
 
   return (
-    <div className={`relative w-full h-[100dvh] flex flex-col justify-between overflow-hidden select-none transition-all duration-1000 bg-gradient-to-br ${CATEGORY_GRADIENTS[activeIndex as keyof typeof CATEGORY_GRADIENTS] || CATEGORY_GRADIENTS[0]}`}>
-      
-      {/* Partículas de Fondo Zen */}
-      <FloatingParticles />
-
-      {/* Header Fijo */}
-      <header className="fixed top-0 left-0 right-0 z-50 p-4 flex flex-col gap-2 bg-gradient-to-b from-[var(--background)] to-transparent pointer-events-none">
-        <div className="flex items-center justify-between w-full max-w-sm mx-auto pointer-events-auto">
-          
-          {/* Logo y Nombre */}
-          <div className="flex items-center gap-1">
-            <Sparkles className="w-5 h-5 text-primary-DEFAULT animate-pulse" />
-            <span className="text-xl font-bold tracking-tight text-[var(--heading)]">Lumina.</span>
+    <div className="relative w-full h-[100dvh] flex flex-col justify-between overflow-hidden select-none bg-[var(--background)] text-[var(--foreground)]">
+      {/* Header Fijo y Sobrio */}
+      <header className="fixed top-0 left-0 right-0 z-50 p-3 sm:p-4 flex flex-col gap-2 bg-[var(--background)]/90 backdrop-blur-md border-b border-[var(--border)] pointer-events-none">
+        <div className="flex items-center justify-between w-full max-w-md mx-auto pointer-events-auto">
+          {/* Wordmark y Subtítulo Neutral */}
+          <div className="flex items-baseline gap-2">
+            <span className="text-lg sm:text-xl font-bold tracking-tight text-[var(--heading)] font-mono">
+              Lumina<span className="text-primary-DEFAULT">.</span>
+            </span>
+            <span className="hidden sm:inline text-xs text-slate-400 font-medium">
+              Cinco avances verificables
+            </span>
           </div>
 
-          {/* Acciones */}
-          <div className="flex items-center gap-3">
-            {/* Llama de racha */}
-            {isMounted && (
-              <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 transition-all">
-                <Flame 
-                  className={`w-4 h-4 transition-all duration-500 ${
-                    streak >= 3 
-                      ? 'text-primary-DEFAULT fill-primary-DEFAULT drop-shadow-[0_0_8px_#facc15] animate-wiggle' 
-                      : 'text-slate-400 dark:text-slate-600'
-                  }`} 
-                />
-                <span className="text-xs font-bold text-[var(--foreground)]">{streak}d</span>
-              </div>
-            )}
-
-            {/* Alternador de Sonido Zen */}
-            <button
-              onClick={toggleAudio}
-              className="p-2 rounded-full bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors cursor-pointer"
-              aria-label="Alternar sonido"
-            >
-              {audioEnabled ? (
-                <Volume2 className="w-4 h-4 text-[var(--foreground)]" />
-              ) : (
-                <VolumeX className="w-4 h-4 text-slate-400 dark:text-slate-600" />
-              )}
-            </button>
-
-            {/* Alternador Modo Oscuro */}
+          {/* Selector de Tema */}
+          <div className="flex items-center gap-2">
             <button
               onClick={() => setTheme(currentTheme === "dark" ? "light" : "dark")}
-              className="p-2 rounded-full bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors cursor-pointer"
+              className="p-2 rounded-full hover:bg-[var(--subtle)] text-slate-500 dark:text-slate-400 transition-colors cursor-pointer"
               aria-label="Alternar tema"
             >
               {currentTheme === "dark" ? (
-                <Sun className="w-4 h-4 text-primary-light" />
+                <Sun className="w-4 h-4 text-amber-400" />
               ) : (
                 <Moon className="w-4 h-4 text-slate-700" />
               )}
@@ -348,55 +219,22 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Barra de progreso */}
+        {/* Barra de progreso 1/5 */}
         <ProgressBar activeIndex={activeIndex} />
       </header>
 
-      {/* Contenedor Feed Snapping */}
-      <main className="w-full h-full overflow-y-scroll snap-y snap-mandatory scroll-smooth focus:outline-none scrollbar-none">
-        {newsList.map((news, index) => (
+      {/* Feed Vertical con Scroll-Snap */}
+      <main className="w-full h-full pt-16 overflow-y-scroll snap-y snap-mandatory scroll-smooth focus:outline-none scrollbar-none">
+        {stories.map((story, index) => (
           <NewsCard
-            key={news.id}
-            news={news}
+            key={story.id}
+            story={story}
             index={index}
-            total={newsList.length}
-            reactionsCount={reactions[news.id] || 0}
-            hasReacted={userReactions.includes(news.id)}
-            onReact={() => handleToggleReaction(news.id)}
+            total={stories.length}
           />
         ))}
         <EndOfFeed />
       </main>
-
-      {/* Pantalla de Onboarding (primer ingreso) */}
-      {showOnboarding && (
-        <div className="fixed inset-0 z-[100] flex flex-col justify-center items-center p-6 bg-gradient-to-br from-yellow-50 via-emerald-50 to-slate-100 dark:from-slate-900 dark:via-slate-950 dark:to-emerald-950">
-          <div className="w-full max-w-sm bg-[var(--card)] rounded-[2.5rem] p-8 shadow-2xl border border-black/5 dark:border-white/5 flex flex-col gap-6 text-center items-center">
-            <div className="w-20 h-20 bg-primary-light/45 text-primary-dark rounded-full flex items-center justify-center mb-2">
-              <Sparkles className="w-10 h-10 text-primary-DEFAULT animate-pulse" />
-            </div>
-            <h1 className="text-3xl font-extrabold text-[var(--heading)] tracking-tight">Bienvenido a Lumina</h1>
-            <p className="text-base leading-relaxed text-[var(--foreground)] opacity-95">
-              Sin ruido, sin clickbait ni negatividad. Solo 5 dosis de puro optimismo diario para empezar tu día con otra energía.
-            </p>
-            <div className="w-full p-4 bg-secondary-light/25 dark:bg-secondary-dark/15 text-secondary-dark dark:text-secondary-light rounded-2xl border border-secondary-light/35 dark:border-secondary-dark/35">
-              <p className="text-sm font-semibold">✨ Desliza hacia arriba para navegar por las noticias de hoy.</p>
-            </div>
-            <button
-              onClick={() => {
-                if (typeof navigator !== "undefined" && navigator.vibrate) {
-                  navigator.vibrate([40, 20, 40]);
-                }
-                localStorage.setItem("has_seen_onboarding", "true");
-                setShowOnboarding(false);
-              }}
-              className="w-full mt-4 py-4 rounded-full bg-primary-DEFAULT hover:bg-primary-dark text-slate-950 font-bold transition-all transform active:scale-95 cursor-pointer shadow-md hover:shadow-lg"
-            >
-              Empezar la dosis
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
