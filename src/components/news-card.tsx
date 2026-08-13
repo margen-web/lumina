@@ -23,47 +23,47 @@ function getStoryTheme(category: string): CategoryTheme {
   if (cat.includes("ciencia") || cat.includes("salud")) {
     return {
       name: category,
-      badgeClass: "text-cyan-700 dark:text-cyan-300 bg-cyan-50 dark:bg-cyan-950/40 border-cyan-200/80 dark:border-cyan-800/60",
-      glowColor: "rgba(6, 182, 212, 0.08)",
+      badgeClass: "text-cyan-700 dark:text-cyan-300 bg-cyan-50 dark:bg-cyan-950/50 border-cyan-200/80 dark:border-cyan-800/70",
+      glowColor: "rgba(6, 182, 212, 0.12)",
       accentText: "text-cyan-600 dark:text-cyan-400",
     };
   }
   if (cat.includes("clima") || cat.includes("energía") || cat.includes("ambiente") || cat.includes("naturaleza")) {
     return {
       name: category,
-      badgeClass: "text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200/80 dark:border-emerald-800/60",
-      glowColor: "rgba(16, 185, 129, 0.08)",
+      badgeClass: "text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200/80 dark:border-emerald-800/70",
+      glowColor: "rgba(16, 185, 129, 0.12)",
       accentText: "text-emerald-600 dark:text-emerald-400",
     };
   }
   if (cat.includes("tecnología") || cat.includes("innovación")) {
     return {
       name: category,
-      badgeClass: "text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/40 border-sky-200/80 dark:border-sky-800/60",
-      glowColor: "rgba(2, 132, 199, 0.08)",
+      badgeClass: "text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/50 border-sky-200/80 dark:border-sky-800/70",
+      glowColor: "rgba(2, 132, 199, 0.12)",
       accentText: "text-sky-600 dark:text-sky-400",
     };
   }
   if (cat.includes("sociedad") || cat.includes("educación") || cat.includes("comunidad")) {
     return {
       name: category,
-      badgeClass: "text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 border-rose-200/80 dark:border-rose-800/60",
-      glowColor: "rgba(244, 63, 94, 0.08)",
+      badgeClass: "text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/50 border-rose-200/80 dark:border-rose-800/70",
+      glowColor: "rgba(244, 63, 94, 0.12)",
       accentText: "text-rose-600 dark:text-rose-400",
     };
   }
   if (cat.includes("océanos") || cat.includes("biodiversidad") || cat.includes("animales")) {
     return {
       name: category,
-      badgeClass: "text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-950/40 border-violet-200/80 dark:border-violet-800/60",
-      glowColor: "rgba(139, 92, 246, 0.08)",
+      badgeClass: "text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-950/50 border-violet-200/80 dark:border-violet-800/70",
+      glowColor: "rgba(139, 92, 246, 0.12)",
       accentText: "text-violet-600 dark:text-violet-400",
     };
   }
   return {
     name: category,
     badgeClass: "text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700",
-    glowColor: "rgba(2, 132, 199, 0.05)",
+    glowColor: "rgba(2, 132, 199, 0.08)",
     accentText: "text-sky-600 dark:text-sky-400",
   };
 }
@@ -112,39 +112,41 @@ export function NewsCard({ story, index }: NewsCardProps) {
   return (
     <article
       data-index={index}
-      className="w-full h-[100dvh] flex flex-col justify-between items-center px-6 sm:px-10 py-20 sm:py-24 snap-start snap-always relative overflow-hidden select-text"
+      className="w-full h-[100dvh] flex flex-col justify-between items-center px-6 sm:px-10 pt-20 pb-12 sm:pt-24 sm:pb-16 snap-start snap-always relative overflow-hidden select-text"
       style={{
-        background: `radial-gradient(circle at 50% 30%, ${theme.glowColor} 0%, transparent 70%)`,
+        background: `radial-gradient(circle at 50% 28%, ${theme.glowColor} 0%, transparent 72%)`,
       }}
     >
       <div className="w-full max-w-lg mx-auto flex flex-col justify-between h-full relative z-10">
         
-        {/* Cabecera de la noticia: Categoría limpia (sin triple contador redundante) */}
-        <div className="flex items-center justify-between pt-1">
+        {/* Bloque Editorial Principal: Categoría + Titular + Resumen + Fuente */}
+        <div className="flex flex-col items-start gap-4 sm:gap-5 pt-1 sm:pt-2">
+          
+          {/* Pastilla de Categoría */}
           <span className={`px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider border transition-colors ${theme.badgeClass}`}>
             {theme.name}
           </span>
-        </div>
 
-        {/* Cuerpo central: Titular vivo + Resumen humano */}
-        <div className="flex flex-col gap-5 sm:gap-7 my-auto py-2">
-          <h1 className="text-2xl sm:text-[2rem] leading-[1.18] font-extrabold tracking-[-0.025em] text-[var(--heading)]">
+          {/* Titular rotundo y sereno */}
+          <h1 className="text-2xl sm:text-[2rem] leading-[1.18] font-extrabold tracking-[-0.025em] text-[var(--heading)] pt-0.5">
             {story.headline}
           </h1>
 
+          {/* Resumen explicativo */}
           <p className="text-base sm:text-lg leading-[1.65] text-slate-600 dark:text-slate-300 font-normal">
             {summaryText}
           </p>
 
-          <div className="text-xs sm:text-sm font-medium text-slate-400 dark:text-slate-500 flex items-center gap-2">
+          {/* Fuente y fecha */}
+          <div className="text-xs sm:text-sm font-medium text-slate-400 dark:text-slate-500 flex items-center gap-2 pt-0.5">
             <span>{story.primary_source_name}</span>
             <span>·</span>
             <span>Hoy</span>
           </div>
         </div>
 
-        {/* Acciones: Leer original + Compartir */}
-        <div className="flex items-center justify-between pt-4 border-t border-[var(--border)]">
+        {/* Acciones inferiores: Leer original + Compartir */}
+        <div className="flex items-center justify-between pt-4 border-t border-[var(--border)] mt-auto">
           <a
             href={story.primary_source_url}
             target="_blank"

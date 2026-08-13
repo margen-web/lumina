@@ -73,9 +73,9 @@ export function EndOfFeed({ editionDate, onReread, isReopen, onEditionCompleted 
     <article
       id="end-of-feed"
       data-index={5}
-      className="w-full h-[100dvh] flex flex-col justify-between items-center px-6 sm:px-10 py-20 sm:py-24 snap-start snap-always relative overflow-hidden text-center"
+      className="w-full h-[100dvh] flex flex-col justify-between items-center px-6 sm:px-10 pt-20 pb-12 sm:pt-24 sm:pb-16 snap-start snap-always relative overflow-hidden text-center"
       style={{
-        background: "radial-gradient(circle at 50% 35%, rgba(56, 189, 248, 0.09) 0%, transparent 65%)",
+        background: "radial-gradient(circle at 50% 34%, rgba(56, 189, 248, 0.12) 0%, transparent 68%)",
       }}
     >
       <div className="w-full max-w-sm mx-auto flex flex-col justify-between h-full relative z-10">
@@ -89,8 +89,17 @@ export function EndOfFeed({ editionDate, onReread, isReopen, onEditionCompleted 
 
         {/* Bloque central: Apertura de luz + Cierre sereno */}
         <div className="flex flex-col items-center gap-6 my-auto">
-          <div className="w-16 h-16 rounded-full bg-sky-50 dark:bg-sky-950/50 text-sky-500 flex items-center justify-center border border-sky-100 dark:border-sky-900/60 shadow-sm transition-transform duration-500 hover:scale-105">
-            <ApertureSymbol size={28} glow={isLitAnimated} />
+          
+          {/* Símbolo con halo suave de luz */}
+          <div className="relative flex items-center justify-center">
+            <div
+              className={`absolute inset-0 rounded-full bg-sky-400/20 blur-xl transition-opacity duration-700 ${
+                isLitAnimated ? "opacity-100 scale-125" : "opacity-0 scale-75"
+              }`}
+            />
+            <div className="w-16 h-16 rounded-full bg-sky-50 dark:bg-sky-950/60 text-sky-500 flex items-center justify-center border border-sky-100/90 dark:border-sky-800/80 shadow-sm relative z-10 transition-transform duration-500 hover:scale-105">
+              <ApertureSymbol size={28} glow={isLitAnimated} />
+            </div>
           </div>
 
           <div className="flex flex-col gap-2">
@@ -100,12 +109,12 @@ export function EndOfFeed({ editionDate, onReread, isReopen, onEditionCompleted 
             <p className="text-base text-slate-500 dark:text-slate-400 font-normal">
               {isReopen 
                 ? "Tus cinco noticias de hoy ya están vistas."
-                : "Has visto las cinco noticias de hoy."}
+                : "Cinco buenas historias. Cero ruido."}
             </p>
           </div>
 
           {/* Racha de Luz: Constelación semanal L M X J V S D */}
-          <div className="w-full p-5 rounded-3xl bg-[var(--subtle)] border border-[var(--border)] flex flex-col items-center gap-3.5">
+          <div className="w-full p-5 rounded-3xl bg-[var(--subtle)] border border-[var(--border)] flex flex-col items-center gap-3.5 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.03)] dark:shadow-none">
             <span className="text-xs font-bold text-[var(--heading)] tracking-wide">
               {streak > 1
                 ? `${streak} días seguidos ✦`
@@ -137,10 +146,8 @@ export function EndOfFeed({ editionDate, onReread, isReopen, onEditionCompleted 
               })}
             </div>
 
-            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              {isReopen
-                ? "Mañana habrá cinco nuevas historias."
-                : "Eso es todo por hoy. Nos vemos mañana."}
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
+              Nos vemos mañana.
             </p>
           </div>
 
@@ -156,12 +163,11 @@ export function EndOfFeed({ editionDate, onReread, isReopen, onEditionCompleted 
           )}
         </div>
 
-        {/* Pie de pantalla */}
-        <div className="pt-4 border-t border-[var(--border)] text-[11px] text-slate-400 dark:text-slate-500 flex items-center justify-between w-full">
+        {/* Pie de pantalla: Enlace limpio a Privacidad sin versión pública */}
+        <div className="pt-4 border-t border-[var(--border)] text-[11px] text-slate-400 dark:text-slate-500 flex items-center justify-center w-full">
           <a href="/privacidad" className="hover:text-[var(--heading)] transition-colors hover:underline">
             Privacidad
           </a>
-          <span className="font-mono text-[10px]">v0.3.5</span>
         </div>
 
       </div>
