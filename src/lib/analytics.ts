@@ -1,3 +1,5 @@
+import { getTodayDateString } from "./streak";
+
 export type LuminaEventName =
   | "session_started"
   | "story_viewed"
@@ -52,8 +54,11 @@ export async function logLuminaEvent(
   const sessionId = getOrCreateSessionId();
   if (!deviceUuid || !sessionId) return;
 
-  // Deduplicación de eventos únicos de ciclo de vida en la misma sesión
-  const dedupKey = `${eventName}_${payload?.storyId || ""}_${payload?.position || ""}`;
+  // Fecha en zona horaria editorial estricta Europe/Madrid
+  const madridEditionDate = payload?.editionDate || getTodayDateString();
+
+  // Deduplicación de eventos únicos en la misma sesión
+  const dedupKey = `${eventName}_${payload?.storyId || ""}_${payload?.position || ""}_${madridEditionDate}`;
   if (
     eventName === "session_started" ||
     eventName === "edition_completed" ||
@@ -78,7 +83,7 @@ export async function logLuminaEvent(
         session_id: sessionId,
         story_id: payload?.storyId || null,
         position: payload?.position ?? null,
-        edition_date: payload?.editionDate || new Date().toISOString().split("T")[0],
+        edition_date: madridEditionDate,
         metadata: {
           source_type: payload?.sourceType,
           method: payload?.method,

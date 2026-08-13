@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { getTodayDateString } from "@/lib/streak";
 
 // In-memory sliding window rate limiter
 interface RateLimitEntry {
@@ -98,13 +99,29 @@ export async function POST(request: NextRequest) {
       validatedPosition = posNum;
     }
 
-    // Validación de fecha (YYYY-MM-DD)
+    // Validación de fecha en Europe/Madrid (YYYY-MM-DD)
     const validDateRegex = /^\d{4}-\d{2}-\d{2}$/;
     const validatedDate = typeof edition_date === "string" && validDateRegex.test(edition_date)
       ? edition_date
-      : new Date().toISOString().split("T")[0];
+      : getTodayDateString();
 
-    // 5. Inserción segura y controlada en Supabase
+    // 5. Deduplicación Server-Side Estricta para edition_completed (máx 1 por device_uuid y edition_date)
+    if (event_name === "edition_completed") {
+      const { data: existingEvents, error: checkError } = await supabase
+        .from("lumina_events")
+        .select("id")
+        .eq("event_name", "edition_completed")
+        .eq("device_uuid", device_uuid)
+        .eq("edition_date", validatedDate)
+        .limit(1);
+
+      if (!checkError && existingEvents && existingEvents.length > 0) {
+        // Ya registrado hoy para este dispositivo: responder éxito deduplicado sin insertar duplicados
+        return NextResponse.json({ ok: true, deduplicated: true }, { status: 200 });
+      }
+    }
+
+    // 6. Inserción segura y controlada en Supabase
     const { error: dbError } = await supabase.from("lumina_events").insert({
       event_name,
       device_uuid,

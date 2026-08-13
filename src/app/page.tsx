@@ -12,15 +12,20 @@ import { logLuminaEvent } from "@/lib/analytics";
 import { getStreakState, getTodayDateString, StreakState } from "@/lib/streak";
 import { validateDailyEdition } from "@/lib/edition";
 
-type EditionLoadStatus = "loading" | "ready" | "not_ready" | "error";
+type EditionLoadStatus = "idle" | "loading" | "ready" | "not_ready" | "error";
 
 export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [stories, setStories] = useState<StoryItem[]>([]);
-  const [editionStatus, setEditionStatus] = useState<EditionLoadStatus>("loading");
+  const [editionStatus, setEditionStatus] = useState<EditionLoadStatus>("idle");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isAlreadyCompletedToday, setIsAlreadyCompletedToday] = useState(false);
+  const [isAlreadyCompletedToday, setIsAlreadyCompletedToday] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return getStreakState().completedToday;
+    }
+    return false;
+  });
   const [streakCount, setStreakCount] = useState<number>(0);
   
   const viewedStoryIds = useRef<Set<string>>(new Set());
@@ -64,14 +69,19 @@ export default function Home() {
     setMounted(true);
     logLuminaEvent("session_started");
 
-    // Comprobar estado de racha y finalización diaria
+    // Comprobar estado de racha y si ya completó hoy
     const streakState = getStreakState();
     setStreakCount(streakState.currentStreak);
-    if (streakState.completedToday) {
-      setIsAlreadyCompletedToday(true);
-    }
 
-    loadDailyEdition();
+    if (streakState.completedToday) {
+      // Reapertura instantánea: no bloquear esperando a Supabase
+      setIsAlreadyCompletedToday(true);
+      setEditionStatus("ready");
+    } else {
+      // Primera apertura: cargar edición de hoy
+      setIsAlreadyCompletedToday(false);
+      loadDailyEdition();
+    }
   }, [loadDailyEdition]);
 
   // IntersectionObserver para registrar la posición activa y story_viewed
@@ -123,6 +133,7 @@ export default function Home() {
   const handleReread = () => {
     setIsAlreadyCompletedToday(false);
     setActiveIndex(0);
+    loadDailyEdition();
     setTimeout(() => {
       if (mainRef.current) {
         mainRef.current.scrollTo({ top: 0, behavior: "smooth" });
@@ -134,7 +145,7 @@ export default function Home() {
     setStreakCount(updatedStreak.currentStreak);
   };
 
-  if (!mounted || editionStatus === "loading") {
+  if (!mounted) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-[var(--background)]">
         <Loader2 className="w-6 h-6 animate-spin text-sky-500" />
@@ -142,7 +153,7 @@ export default function Home() {
     );
   }
 
-  // CASO DE REAPERTURA: Mostrar directamente la pantalla de finitud serena
+  // CASO DE REAPERTURA INSTANTÁNEA: Mostrar inmediatamente End State sin latencia de red
   if (isAlreadyCompletedToday) {
     return (
       <div className="relative w-full h-[100dvh] flex flex-col justify-between overflow-hidden bg-[var(--background)] text-[var(--foreground)] animate-noise-to-light">
@@ -172,6 +183,14 @@ export default function Home() {
 
         <EndOfFeed onReread={handleReread} isReopen={true} onEditionCompleted={handleEditionCompleted} />
         <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+      </div>
+    );
+  }
+
+  if (editionStatus === "loading") {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-[var(--background)]">
+        <Loader2 className="w-6 h-6 animate-spin text-sky-500" />
       </div>
     );
   }
@@ -248,7 +267,7 @@ export default function Home() {
         </div>
 
         <div className="text-[11px] text-slate-400 text-center font-mono">
-          Lumina Core 0.3.3
+          Lumina Core 0.3.4
         </div>
       </div>
     );
