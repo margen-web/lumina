@@ -75,6 +75,24 @@
   animation: noiseToLight 420ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* Accesibilidad: Soporte estricto para prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-noise-to-light {
+    animation: none !important;
+    filter: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
+}
+
 /* Scroll snap utility */
 @utility scrollbar-none {
   -ms-overflow-style: none;

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
-import { X, Sun, Moon, Laptop, Bell, Shield, Info } from "lucide-react";
+import { X, Sun, Moon, Laptop, Shield, Info } from "lucide-react";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -12,28 +12,11 @@ interface SettingsModalProps {
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
-    const savedNotif = localStorage.getItem("lumina_daily_notif");
-    if (savedNotif === "true") {
-      setNotificationsEnabled(true);
-    }
   }, []);
-
-  const handleToggleNotifications = async () => {
-    const nextState = !notificationsEnabled;
-    setNotificationsEnabled(nextState);
-    localStorage.setItem("lumina_daily_notif", nextState ? "true" : "false");
-
-    if (nextState && typeof window !== "undefined" && "Notification" in window) {
-      if (Notification.permission === "default") {
-        await Notification.requestPermission();
-      }
-    }
-  };
 
   if (!isOpen || !mounted) return null;
 
@@ -55,7 +38,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           </button>
         </div>
 
-        {/* Sección 1: Apariencia */}
+        {/* Sección: Apariencia */}
         <div className="flex flex-col gap-2.5">
           <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
             Apariencia
@@ -97,37 +80,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           </div>
         </div>
 
-        {/* Sección 2: Notificaciones Opt-in */}
-        <div className="flex flex-col gap-2.5">
-          <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            Avisos diarios
-          </label>
-          <div className="p-3.5 rounded-2xl bg-[var(--subtle)] border border-[var(--border)] flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <Bell className="w-4 h-4 text-sky-500" />
-              <div className="flex flex-col">
-                <span className="text-xs font-bold text-[var(--heading)]">Aviso de edición</span>
-                <span className="text-[11px] text-slate-500 leading-tight">Máximo una notificación al día</span>
-              </div>
-            </div>
-            <button
-              onClick={handleToggleNotifications}
-              className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
-                notificationsEnabled ? "bg-sky-500" : "bg-slate-300 dark:bg-slate-700"
-              }`}
-              role="switch"
-              aria-checked={notificationsEnabled}
-            >
-              <span
-                className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${
-                  notificationsEnabled ? "left-6" : "left-1"
-                }`}
-              />
-            </button>
-          </div>
-        </div>
-
-        {/* Sección 3: Enlaces y Acerca de */}
+        {/* Sección: Enlaces y Acerca de */}
         <div className="flex flex-col gap-2 pt-2 border-t border-[var(--border)]">
           <a
             href="/privacidad"
@@ -139,15 +92,15 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             <span className="text-slate-400">↗</span>
           </a>
 
-          <div className="p-3 rounded-xl bg-[var(--subtle)] text-[11px] text-slate-500 dark:text-slate-400 flex items-start gap-2">
-            <Info className="w-3.5 h-3.5 shrink-0 mt-0.5 text-sky-500" />
-            <p>
+          <div className="p-3.5 rounded-2xl bg-[var(--subtle)] text-[11px] text-slate-500 dark:text-slate-400 flex items-start gap-2.5">
+            <Info className="w-4 h-4 shrink-0 mt-0.5 text-sky-500" />
+            <p className="leading-relaxed">
               Lumina te muestra cinco noticias positivas al día. Una vez terminas, se acabó hasta mañana.
             </p>
           </div>
 
           <div className="text-center pt-1 text-[10px] text-slate-400 font-mono">
-            Lumina Core 0.3
+            Lumina Core 0.3.2
           </div>
         </div>
 
