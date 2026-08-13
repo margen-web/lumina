@@ -1,5 +1,3 @@
-import { supabase } from "./supabase";
-
 export type LuminaEventName =
   | "session_started"
   | "story_viewed"
@@ -10,7 +8,7 @@ export type LuminaEventName =
   | "story_shared"
   | "edition_completed";
 
-// Generar u obtener un identificador único anónimo persistente del dispositivo
+// Generar u obtener un identificador anónimo del dispositivo persistente
 export function getOrCreateDeviceUuid(): string {
   if (typeof window === "undefined") return "";
   let uuid = localStorage.getItem("lumina_device_uuid");
@@ -34,12 +32,8 @@ export function getOrCreateSessionId(): string {
   return sid;
 }
 
-// Control de tasa y deduplicación en memoria para mitigar abusos
-const recentEvents = new Set<string>();
-let eventCountInWindow = 0;
-let windowStartTime = Date.now();
-
-const MAX_EVENTS_PER_MINUTE = 40;
+// Deduplicación en cliente para evitar dobles disparos por re-renders de React
+const loggedSessionEvents = new Set<string>();
 
 export async function logLuminaEvent(
   eventName: LuminaEventName,
@@ -58,49 +52,46 @@ export async function logLuminaEvent(
   const sessionId = getOrCreateSessionId();
   if (!deviceUuid || !sessionId) return;
 
-  // Control de tasa por minuto
-  const now = Date.now();
-  if (now - windowStartTime > 60000) {
-    windowStartTime = now;
-    eventCountInWindow = 0;
-  }
-  if (eventCountInWindow >= MAX_EVENTS_PER_MINUTE) {
-    return;
-  }
-  eventCountInWindow++;
-
-  // Clave de deduplicación para eventos idénticos en la misma sesión
+  // Deduplicación de eventos únicos de ciclo de vida en la misma sesión
   const dedupKey = `${eventName}_${payload?.storyId || ""}_${payload?.position || ""}`;
   if (
     eventName === "session_started" ||
     eventName === "edition_completed" ||
-    eventName === "story_viewed"
+    eventName === "story_viewed" ||
+    eventName === "story_completed"
   ) {
-    if (recentEvents.has(dedupKey)) {
+    if (loggedSessionEvents.has(dedupKey)) {
       return;
     }
-    recentEvents.add(dedupKey);
+    loggedSessionEvents.add(dedupKey);
   }
 
   try {
-    const { error } = await supabase.from("lumina_events").insert({
-      event_name: eventName,
-      device_uuid: deviceUuid,
-      session_id: sessionId,
-      news_id: payload?.storyId || null,
-      position: payload?.position ?? null,
-      edition_date: payload?.editionDate || new Date().toISOString().split("T")[0],
-      metadata: {
-        source_type: payload?.sourceType,
-        method: payload?.method,
-        ...payload?.metadata,
+    const res = await fetch("/api/events", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
+      body: JSON.stringify({
+        event_name: eventName,
+        device_uuid: deviceUuid,
+        session_id: sessionId,
+        story_id: payload?.storyId || null,
+        position: payload?.position ?? null,
+        edition_date: payload?.editionDate || new Date().toISOString().split("T")[0],
+        metadata: {
+          source_type: payload?.sourceType,
+          method: payload?.method,
+          ...payload?.metadata,
+        },
+      }),
     });
 
-    if (error) {
-      console.warn("Analytics log warning:", error.message);
+    if (!res.ok && res.status !== 429) {
+      console.warn("Analytics route response status:", res.status);
     }
   } catch (err) {
-    console.warn("Failed to record analytics event:", err);
+    // Analytics nunca debe romper la experiencia de usuario
+    console.warn("Analytics dispatch warning:", err);
   }
 }

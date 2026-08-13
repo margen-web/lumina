@@ -23,6 +23,7 @@ export function NewsCard({ story, index, total }: NewsCardProps) {
     }
     if (nextState) {
       logLuminaEvent("evidence_opened", { storyId: story.id, position: index + 1 });
+      logLuminaEvent("story_completed", { storyId: story.id, position: index + 1 });
     } else {
       logLuminaEvent("evidence_closed", { storyId: story.id, position: index + 1 });
     }

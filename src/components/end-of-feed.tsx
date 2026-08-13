@@ -53,10 +53,11 @@ export function EndOfFeed() {
           </p>
         </div>
 
-        <div className="pt-2 text-[11px] text-slate-400 dark:text-slate-500">
+        <div className="pt-2 text-[11px] text-slate-400 dark:text-slate-500 flex items-center justify-between w-full px-2">
           <a href="/privacidad" className="hover:text-[var(--heading)] transition-colors hover:underline">
-            Privacidad & Metodología Editorial
+            Privacidad & Metodología
           </a>
+          <span className="font-mono text-[10px] opacity-70">v0.2.1</span>
         </div>
       </div>
     </article>

@@ -10,7 +10,7 @@ import {
   Save,
   Plus,
   BarChart3,
-  Sparkles,
+  ShieldAlert,
 } from "lucide-react";
 import { supabase, StoryItem } from "@/lib/supabase";
 
@@ -34,6 +34,7 @@ interface MetricsData {
 
 export default function DashboardPage() {
   const [sessionUser, setSessionUser] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [emailInput, setEmailInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
@@ -55,15 +56,55 @@ export default function DashboardPage() {
   // Estado de Métricas
   const [metrics, setMetrics] = useState<MetricsData | null>(null);
 
+  // Verificar rol administrativo real en Supabase
+  const verifyAdminRole = async (userId: string, email: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("lumina_admins")
+        .select("role")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (error || !data || data.role !== "admin") {
+        await supabase.auth.signOut();
+        setSessionUser(null);
+        setIsAdmin(false);
+        setLoginError("Acceso denegado: Esta cuenta no cuenta con permisos administrativos.");
+        return false;
+      }
+
+      setSessionUser(email);
+      setIsAdmin(true);
+      setLoginError("");
+      return true;
+    } catch {
+      await supabase.auth.signOut();
+      setSessionUser(null);
+      setIsAdmin(false);
+      setLoginError("Error de autorización al comprobar permisos de administrador.");
+      return false;
+    }
+  };
+
   // Check auth session
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSessionUser(session?.user?.email || null);
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user?.id && session.user.email) {
+        await verifyAdminRole(session.user.id, session.user.email);
+      } else {
+        setSessionUser(null);
+        setIsAdmin(false);
+      }
       setAuthLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSessionUser(session?.user?.email || null);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user?.id && session.user.email) {
+        await verifyAdminRole(session.user.id, session.user.email);
+      } else {
+        setSessionUser(null);
+        setIsAdmin(false);
+      }
       setAuthLoading(false);
     });
 
@@ -162,7 +203,7 @@ export default function DashboardPage() {
         if (edSet.size >= 5) fivePlus++;
       });
 
-      const uniqueDevCount = deviceSet.size || 1;
+      const uniqueDevCount = deviceSet.size || 0;
       const compRate = totalSessions > 0 ? Math.round((editionCompletes / totalSessions) * 100) : 0;
 
       setMetrics({
@@ -187,13 +228,13 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // Cargar historias de la fecha seleccionada
+  // Cargar historias y métricas cuando hay sesión admin activa
   useEffect(() => {
-    if (!sessionUser) return;
+    if (!sessionUser || !isAdmin) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadStoriesForDate(selectedDate);
     loadMetrics();
-  }, [sessionUser, selectedDate, loadStoriesForDate, loadMetrics]);
+  }, [sessionUser, isAdmin, selectedDate, loadStoriesForDate, loadMetrics]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -208,8 +249,11 @@ export default function DashboardPage() {
 
       if (error) {
         setLoginError(error.message || "Credenciales incorrectas.");
-      } else if (data.user) {
-        setSessionUser(data.user.email || null);
+      } else if (data.user && data.user.email) {
+        const verified = await verifyAdminRole(data.user.id, data.user.email);
+        if (!verified) {
+          return;
+        }
       }
     } catch {
       setLoginError("Error de conexión con el servidor de autenticación.");
@@ -221,9 +265,9 @@ export default function DashboardPage() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setSessionUser(null);
+    setIsAdmin(false);
   };
 
-  // Crear nueva historia para la posición actual
   const handleCreateStory = (position: number) => {
     const newStory: StoryItem = {
       id: `story-${selectedDate}-${position}`,
@@ -268,10 +312,10 @@ export default function DashboardPage() {
       for (const story of stories) {
         const { error } = await supabase
           .from("lumina_stories")
-          .upsert(story, { onConflict: "id" });
+          .upsert(story, { onConflict: "edition_date,edition_position" });
         if (error) throw error;
       }
-      setSaveStatus("Edición guardada correctamente.");
+      setSaveStatus("Edición guardada correctamente en base de datos.");
       setTimeout(() => setSaveStatus(null), 3000);
       loadStoriesForDate(selectedDate);
     } catch (err: unknown) {
@@ -284,14 +328,14 @@ export default function DashboardPage() {
 
   const currentStory = stories[selectedStoryIndex] || null;
 
-  // Validaciones editoriales
+  // Validaciones editoriales y auditoría de jerarquía de fuentes
   const validationWarnings: string[] = [];
   if (stories.length !== 5) {
-    validationWarnings.push(`La edición tiene ${stories.length} historias (se recomiendan exactamente 5).`);
+    validationWarnings.push(`La edición tiene ${stories.length} historias (se requieren exactamente 5 para estar lista).`);
   }
   const publishedCount = stories.filter((s) => s.status === "published").length;
   if (publishedCount > 0 && publishedCount < 5) {
-    validationWarnings.push(`Hay solo ${publishedCount} historias publicadas de 5.`);
+    validationWarnings.push(`Hay ${publishedCount} historias marcadas como PUBLISHED (se recomiendan 5 para publicación completa).`);
   }
   const categoryCounts: { [cat: string]: number } = {};
   stories.forEach((s) => {
@@ -302,23 +346,26 @@ export default function DashboardPage() {
     if (!s.evidence || s.evidence.trim().length < 10) {
       validationWarnings.push(`Posición ${s.edition_position}: Falta especificar la evidencia o estudio.`);
     }
+    if (s.primary_source_type === "other") {
+      validationWarnings.push(`Posición ${s.edition_position}: Aviso Tier 4 (Fuente no catalogada como Tier 1 o Tier 2).`);
+    }
   });
   Object.entries(categoryCounts).forEach(([cat, count]) => {
     if (count >= 3) {
-      validationWarnings.push(`Aviso de diversidad: ${count} historias concentradas en '${cat}'.`);
+      validationWarnings.push(`Aviso de concentración: ${count} historias pertenecen a '${cat}'.`);
     }
   });
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400">
-        Cargando acceso seguro...
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400 font-mono text-xs">
+        Comprobando autorización administrativa...
       </div>
     );
   }
 
   // PANTALLA DE LOGIN CON SUPABASE AUTH
-  if (!sessionUser) {
+  if (!sessionUser || !isAdmin) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950/30">
         <div className="w-full max-w-sm bg-slate-900/80 backdrop-blur-xl rounded-3xl p-8 shadow-2xl border border-white/10 flex flex-col gap-6 items-center text-center">
@@ -330,14 +377,14 @@ export default function DashboardPage() {
               Lumina Admin<span className="text-primary-DEFAULT">.</span>
             </h1>
             <p className="text-xs text-slate-400 mt-1">
-              Acceso administrativo seguro (Supabase Auth)
+              Acceso restringido a administradores
             </p>
           </div>
 
           <form onSubmit={handleLogin} className="w-full flex flex-col gap-3.5">
             <input
               type="email"
-              placeholder="Email del editor"
+              placeholder="Email administrativo"
               value={emailInput}
               onChange={(e) => setEmailInput(e.target.value)}
               className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-white/10 focus:border-primary-DEFAULT/50 focus:outline-none text-xs text-white placeholder-slate-500"
@@ -353,9 +400,10 @@ export default function DashboardPage() {
             />
 
             {loginError && (
-              <p className="text-xs text-rose-400 font-semibold bg-rose-500/10 p-2 rounded-lg border border-rose-500/20">
-                {loginError}
-              </p>
+              <div className="flex items-center gap-2 text-xs text-rose-400 font-semibold bg-rose-500/10 p-2.5 rounded-lg border border-rose-500/20 text-left">
+                <ShieldAlert className="w-4 h-4 shrink-0" />
+                <span>{loginError}</span>
+              </div>
             )}
 
             <button
@@ -363,7 +411,7 @@ export default function DashboardPage() {
               disabled={isLoggingIn}
               className="w-full py-3 rounded-xl bg-primary-DEFAULT hover:bg-primary-dark text-slate-950 font-bold text-xs transition-all cursor-pointer shadow-md disabled:opacity-50"
             >
-              {isLoggingIn ? "Verificando..." : "Entrar al Panel"}
+              {isLoggingIn ? "Verificando RLS..." : "Entrar al Panel"}
             </button>
           </form>
         </div>
@@ -371,7 +419,7 @@ export default function DashboardPage() {
     );
   }
 
-  // PANEL PRINCIPAL AUTENTICADO
+  // PANEL PRINCIPAL AUTENTICADO COMO ADMIN
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-8 font-sans">
       <div className="max-w-6xl mx-auto flex flex-col gap-6">
@@ -383,7 +431,7 @@ export default function DashboardPage() {
               Lumina<span className="text-primary-DEFAULT">.</span>
             </span>
             <span className="text-xs px-2.5 py-0.5 rounded-md bg-white/5 border border-white/10 text-slate-400 font-mono">
-              Validation Build 0.2
+              Build 0.2.1 (Hardened)
             </span>
           </div>
 
@@ -396,7 +444,7 @@ export default function DashboardPage() {
                   : "text-slate-400 hover:text-white"
               }`}
             >
-              <BarChart3 className="w-3.5 h-3.5" /> Métricas
+              <BarChart3 className="w-3.5 h-3.5" /> Métricas Observadas
             </button>
             <button
               onClick={() => setActiveTab("editor")}
@@ -429,25 +477,25 @@ export default function DashboardPage() {
           </div>
         </header>
 
-        {/* PESTAÑA 1: MÉTRICAS DEL EXPERIMENTO DE VALIDACIÓN */}
+        {/* PESTAÑA 1: MÉTRICAS OBSERVADAS (SIN TARGETS ARBITRARIOS) */}
         {activeTab === "metrics" && (
           <div className="flex flex-col gap-6">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="p-5 rounded-2xl bg-slate-900/60 border border-white/10">
                 <span className="text-xs uppercase font-mono text-slate-400">Dispositivos Únicos</span>
-                <p className="text-3xl font-extrabold text-white mt-1">{metrics?.uniqueDevices || 0}</p>
+                <p className="text-3xl font-extrabold text-white mt-1">{metrics?.uniqueDevices ?? 0}</p>
               </div>
               <div className="p-5 rounded-2xl bg-slate-900/60 border border-white/10">
-                <span className="text-xs uppercase font-mono text-slate-400">Sesiones Totales</span>
-                <p className="text-3xl font-extrabold text-white mt-1">{metrics?.totalSessions || 0}</p>
+                <span className="text-xs uppercase font-mono text-slate-400">Sesiones Iniciadas</span>
+                <p className="text-3xl font-extrabold text-white mt-1">{metrics?.totalSessions ?? 0}</p>
               </div>
               <div className="p-5 rounded-2xl bg-slate-900/60 border border-white/10">
-                <span className="text-xs uppercase font-mono text-slate-400">Dosis Completadas</span>
-                <p className="text-3xl font-extrabold text-emerald-400 mt-1">{metrics?.editionCompletes || 0}</p>
+                <span className="text-xs uppercase font-mono text-slate-400">Ediciones Completadas</span>
+                <p className="text-3xl font-extrabold text-slate-200 mt-1">{metrics?.editionCompletes ?? 0}</p>
               </div>
               <div className="p-5 rounded-2xl bg-slate-900/60 border border-white/10">
                 <span className="text-xs uppercase font-mono text-slate-400">Completion Rate</span>
-                <p className="text-3xl font-extrabold text-primary-DEFAULT mt-1">{metrics?.completionRate || 0}%</p>
+                <p className="text-3xl font-extrabold text-primary-DEFAULT mt-1">{metrics?.completionRate ?? 0}%</p>
               </div>
             </div>
 
@@ -462,9 +510,9 @@ export default function DashboardPage() {
                   const pct = metrics?.totalSessions ? Math.round((views / metrics.totalSessions) * 100) : 0;
                   return (
                     <div key={pos} className="flex flex-col gap-1">
-                      <div className="flex justify-between text-xs text-slate-400">
-                        <span>Historia {pos}</span>
-                        <span>{views} aperturas ({pct}%)</span>
+                      <div className="flex justify-between text-xs text-slate-400 font-mono">
+                        <span>Posición {pos}</span>
+                        <span>{views} visualizaciones ({pct}%)</span>
                       </div>
                       <div className="w-full h-2 rounded-full bg-slate-950 overflow-hidden">
                         <div
@@ -478,39 +526,35 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Métrica Experimental Clave: Retención de Retorno a 7 días */}
+            {/* Retención Experimental Observada */}
             <div className="p-6 rounded-2xl bg-slate-900/60 border border-white/10 flex flex-col gap-4">
-              <div className="flex items-center gap-2 text-primary-DEFAULT">
-                <Sparkles className="w-4 h-4" />
-                <h3 className="text-sm font-bold uppercase tracking-wider text-white">
-                  Métrica Experimental de Validación: Retorno a 7 Días
-                </h3>
-              </div>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-white">
+                Dispositivos con Retorno Observado (Ventana de 7 Días)
+              </h3>
               <p className="text-xs text-slate-400 leading-relaxed">
-                % de lectores que completan al menos 2, 3 o 5 ediciones distintas.
+                Datos observados sin ponderaciones arbitrarias.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-2">
                 <div className="p-4 rounded-xl bg-slate-950 border border-white/5">
-                  <span className="text-xs text-slate-400 font-mono">≥ 2 Ediciones en 7d</span>
-                  <p className="text-2xl font-bold text-white mt-1">{metrics?.multiEditionUsers.twoPlus || 0} usuarios</p>
+                  <span className="text-xs text-slate-400 font-mono">≥ 2 Ediciones completadas</span>
+                  <p className="text-2xl font-bold text-white mt-1">{metrics?.multiEditionUsers.twoPlus || 0} dispositivos</p>
                 </div>
                 <div className="p-4 rounded-xl bg-slate-950 border border-white/5">
-                  <span className="text-xs text-slate-400 font-mono">≥ 3 Ediciones en 7d</span>
-                  <p className="text-2xl font-bold text-emerald-400 mt-1">{metrics?.multiEditionUsers.threePlus || 0} usuarios</p>
+                  <span className="text-xs text-slate-400 font-mono">≥ 3 Ediciones completadas</span>
+                  <p className="text-2xl font-bold text-white mt-1">{metrics?.multiEditionUsers.threePlus || 0} dispositivos</p>
                 </div>
                 <div className="p-4 rounded-xl bg-slate-950 border border-white/5">
-                  <span className="text-xs text-slate-400 font-mono">≥ 5 Ediciones en 7d</span>
-                  <p className="text-2xl font-bold text-primary-DEFAULT mt-1">{metrics?.multiEditionUsers.fivePlus || 0} usuarios</p>
+                  <span className="text-xs text-slate-400 font-mono">≥ 5 Ediciones completadas</span>
+                  <p className="text-2xl font-bold text-white mt-1">{metrics?.multiEditionUsers.fivePlus || 0} dispositivos</p>
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* PESTAÑA 2: EDITOR EDITORIAL CON SCORING Y VALIDACIÓN */}
+        {/* PESTAÑA 2: EDITOR EDITORIAL */}
         {activeTab === "editor" && (
           <div className="flex flex-col gap-6">
-            {/* Selector de Fecha y Advertencias */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-2xl bg-slate-900/60 border border-white/10">
               <div className="flex items-center gap-3">
                 <label className="text-xs font-mono text-slate-400">Fecha de la Edición:</label>
@@ -540,11 +584,11 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Panel de Advertencias Editoriales */}
+            {/* Alertas de Calidad Editorial */}
             {validationWarnings.length > 0 && (
               <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex flex-col gap-2">
                 <div className="flex items-center gap-2 text-amber-400 font-bold text-xs uppercase tracking-wider">
-                  <AlertTriangle className="w-4 h-4" /> Alertas de Calidad Editorial
+                  <AlertTriangle className="w-4 h-4" /> Alertas de Integridad Editorial
                 </div>
                 <ul className="text-xs text-amber-300/90 list-disc list-inside flex flex-col gap-1">
                   {validationWarnings.map((w, idx) => (
@@ -591,7 +635,7 @@ export default function DashboardPage() {
               <div className="p-6 rounded-2xl bg-slate-900/60 border border-white/10 flex flex-col gap-5">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
-                    <label className="text-xs text-slate-400 font-mono">Estado</label>
+                    <label className="text-xs text-slate-400 font-mono">Estado de Publicación</label>
                     <select
                       value={currentStory.status}
                       onChange={(e) => handleUpdateCurrentStoryField("status", e.target.value)}
@@ -615,44 +659,46 @@ export default function DashboardPage() {
                   </div>
 
                   <div>
-                    <label className="text-xs text-slate-400 font-mono">Tipo de Fuente Primaria</label>
+                    <label className="text-xs text-slate-400 font-mono">Jerarquía de Fuente</label>
                     <select
                       value={currentStory.primary_source_type}
                       onChange={(e) => handleUpdateCurrentStoryField("primary_source_type", e.target.value)}
                       className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-xs text-white focus:outline-none"
                     >
-                      <option value="scientific_paper">Paper Científico (Peer-reviewed)</option>
-                      <option value="official_data">Datos Oficiales / Gobierno</option>
-                      <option value="public_institution">Institución Pública / ONU</option>
-                      <option value="university">Universidad / Centro de Investigación</option>
-                      <option value="NGO_report">Informe de ONG Auditado</option>
-                      <option value="reputable_media">Agencia / Medio de Referencia</option>
+                      <option value="scientific_paper">Tier 1 — Paper Científico (Peer-reviewed)</option>
+                      <option value="official_data">Tier 1 — Estadísticas / Datos Oficiales</option>
+                      <option value="public_institution">Tier 1 — Organismo Público / ONU</option>
+                      <option value="university">Tier 1 — Universidad / Centro Investigador</option>
+                      <option value="NGO_report">Tier 1 — Informe de ONG Auditado</option>
+                      <option value="major_news_agency">Tier 2 — Agencia (Reuters / AP / AFP)</option>
+                      <option value="reputable_media">Tier 2/3 — Medio Especializado de Referencia</option>
+                      <option value="other">Tier 4 — Otra Fuente (Requiere Verificación)</option>
                     </select>
                   </div>
                 </div>
 
                 {/* Titular */}
                 <div>
-                  <label className="text-xs text-slate-400 font-mono">Titular (Factual y sin clickbait)</label>
+                  <label className="text-xs text-slate-400 font-mono">Titular (Máx 110 caracteres recomendados)</label>
                   <input
                     type="text"
                     value={currentStory.headline}
                     onChange={(e) => handleUpdateCurrentStoryField("headline", e.target.value)}
                     className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-xs sm:text-sm text-white font-bold focus:outline-none"
-                    placeholder="Escribe el titular claro..."
+                    placeholder="Escribe el titular claro y factual..."
                   />
                 </div>
 
                 {/* Qué cambió y Por qué importa */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="text-xs text-slate-400 font-mono">Qué cambió (Máx 2 frases)</label>
+                    <label className="text-xs text-slate-400 font-mono">Qué cambió (Máx 2 frases concisas)</label>
                     <textarea
                       rows={3}
                       value={currentStory.what_changed}
                       onChange={(e) => handleUpdateCurrentStoryField("what_changed", e.target.value)}
                       className="w-full mt-1 p-3 rounded-xl bg-slate-950 border border-white/10 text-xs text-white leading-relaxed focus:outline-none resize-none"
-                      placeholder="Qué ocurrió exactamente con datos objetivos..."
+                      placeholder="Qué ocurrió exactamente..."
                     />
                   </div>
                   <div>
@@ -662,7 +708,7 @@ export default function DashboardPage() {
                       value={currentStory.why_it_matters}
                       onChange={(e) => handleUpdateCurrentStoryField("why_it_matters", e.target.value)}
                       className="w-full mt-1 p-3 rounded-xl bg-slate-950 border border-white/10 text-xs text-white leading-relaxed focus:outline-none resize-none"
-                      placeholder="Por qué este avance tiene impacto sistémico..."
+                      placeholder="Impacto y relevancia..."
                     />
                   </div>
                 </div>
@@ -670,18 +716,18 @@ export default function DashboardPage() {
                 {/* Evidencia y Métrica */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="sm:col-span-2">
-                    <label className="text-xs text-slate-400 font-mono">Evidencia / Estudio / Datos concretos</label>
+                    <label className="text-xs text-slate-400 font-mono">Evidencia / Respaldo Factual</label>
                     <textarea
                       rows={3}
                       value={currentStory.evidence}
                       onChange={(e) => handleUpdateCurrentStoryField("evidence", e.target.value)}
                       className="w-full mt-1 p-3 rounded-xl bg-slate-950 border border-white/10 text-xs text-white leading-relaxed focus:outline-none resize-none"
-                      placeholder="Detalle del paper, tamaño de muestra o auditoría..."
+                      placeholder="Datos, muestra o paper..."
                     />
                   </div>
                   <div className="flex flex-col gap-2">
                     <div>
-                      <label className="text-xs text-slate-400 font-mono">Métrica Clave</label>
+                      <label className="text-xs text-slate-400 font-mono">Métrica Destacada (Opcional)</label>
                       <input
                         type="text"
                         value={currentStory.evidence_metric || ""}
@@ -706,14 +752,14 @@ export default function DashboardPage() {
                 {/* Qué queda pendiente (Caveat) */}
                 <div>
                   <label className="text-xs text-amber-400 font-mono flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3" /> Qué queda pendiente / Limitaciones (Caveat)
+                    <AlertTriangle className="w-3 h-3" /> Qué queda pendiente / Limitaciones (Caveat Obligatorio)
                   </label>
                   <textarea
                     rows={2}
                     value={currentStory.caveat}
                     onChange={(e) => handleUpdateCurrentStoryField("caveat", e.target.value)}
                     className="w-full mt-1 p-3 rounded-xl bg-slate-950 border border-amber-500/20 text-xs text-white leading-relaxed focus:outline-none resize-none"
-                    placeholder="Qué retos siguen abiertos o qué no está demostrado todavía..."
+                    placeholder="Qué retos siguen abiertos o qué no está resuelto todavía..."
                   />
                 </div>
 
@@ -726,11 +772,11 @@ export default function DashboardPage() {
                       value={currentStory.primary_source_name}
                       onChange={(e) => handleUpdateCurrentStoryField("primary_source_name", e.target.value)}
                       className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-xs text-white focus:outline-none"
-                      placeholder="Ej: Nature Communications"
+                      placeholder="Ej: Rede Eléctrica Nacional (REN)"
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-slate-400 font-mono">URL Oficial Directa</label>
+                    <label className="text-xs text-slate-400 font-mono">URL Directa Verificable</label>
                     <input
                       type="url"
                       value={currentStory.primary_source_url}
@@ -742,14 +788,14 @@ export default function DashboardPage() {
                 </div>
               </div>
             ) : (
-              <div className="p-12 text-center text-slate-500 bg-slate-900/40 rounded-2xl border border-white/5">
+              <div className="p-12 text-center text-slate-500 bg-slate-900/40 rounded-2xl border border-white/5 font-mono text-xs">
                 Selecciona una posición para editar o crear una historia.
               </div>
             )}
           </div>
         )}
 
-        {/* PESTAÑA 3: PREVIEW MÓVIL EN TIEMPO REAL */}
+        {/* PESTAÑA 3: PREVIEW MÓVIL */}
         {activeTab === "preview" && currentStory && (
           <div className="flex flex-col items-center gap-4 py-4">
             <div className="w-full max-w-sm bg-slate-950 p-4 rounded-[2.5rem] border border-white/10 shadow-2xl">
@@ -763,7 +809,7 @@ export default function DashboardPage() {
                   </span>
                 </div>
                 <h3 className="text-lg font-bold text-white leading-tight">
-                  {currentStory.headline || "Titular de ejemplo..."}
+                  {currentStory.headline || "Titular..."}
                 </h3>
                 <div className="text-xs text-slate-300 flex flex-col gap-2">
                   <div>
@@ -793,7 +839,7 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="text-[11px] text-slate-400 pt-1 border-t border-white/5">
-                  Fuente: {currentStory.primary_source_name || "Nombre de fuente"}
+                  Fuente: {currentStory.primary_source_name || "Fuente"}
                 </div>
               </div>
             </div>

@@ -2,7 +2,7 @@
 
 import { useTheme } from "next-themes";
 import { useEffect, useState, useRef } from "react";
-import { Sun, Moon, Loader2 } from "lucide-react";
+import { Sun, Moon, Loader2, WifiOff } from "lucide-react";
 import { ProgressBar } from "@/components/progress-bar";
 import { NewsCard } from "@/components/news-card";
 import { EndOfFeed } from "@/components/end-of-feed";
@@ -103,7 +103,11 @@ export default function Home() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [stories, setStories] = useState<StoryItem[]>(FALLBACK_STORIES);
   const [isLoading, setIsLoading] = useState(true);
+  const [isOfflineFallback, setIsOfflineFallback] = useState(false);
+  
   const viewedStoryIds = useRef<Set<string>>(new Set());
+  const completedStoryIds = useRef<Set<string>>(new Set());
+  const dwellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -121,9 +125,13 @@ export default function Home() {
 
         if (!error && data && data.length > 0) {
           setStories(data as StoryItem[]);
+          setIsOfflineFallback(false);
+        } else {
+          setIsOfflineFallback(true);
         }
       } catch (err) {
-        console.warn("Using fallback stories:", err);
+        console.warn("Using offline fallback:", err);
+        setIsOfflineFallback(true);
       } finally {
         setIsLoading(false);
       }
@@ -132,7 +140,7 @@ export default function Home() {
     fetchStories();
   }, []);
 
-  // IntersectionObserver para detectar la historia activa y registrar story_viewed
+  // IntersectionObserver para registrar story_viewed y cronometrar story_completed
   useEffect(() => {
     if (!mounted) return;
     const mainElement = document.querySelector("main");
@@ -145,15 +153,35 @@ export default function Home() {
             const index = parseInt(entry.target.getAttribute("data-index") || "0", 10);
             setActiveIndex(index);
 
+            // Limpiar temporizador previo
+            if (dwellTimerRef.current) {
+              clearTimeout(dwellTimerRef.current);
+            }
+
             if (index < stories.length) {
               const currentStory = stories[index];
-              if (currentStory && !viewedStoryIds.current.has(currentStory.id)) {
-                viewedStoryIds.current.add(currentStory.id);
-                logLuminaEvent("story_viewed", {
-                  storyId: currentStory.id,
-                  position: index + 1,
-                  editionDate: currentStory.edition_date,
-                });
+              if (currentStory) {
+                // Registrar story_viewed
+                if (!viewedStoryIds.current.has(currentStory.id)) {
+                  viewedStoryIds.current.add(currentStory.id);
+                  logLuminaEvent("story_viewed", {
+                    storyId: currentStory.id,
+                    position: index + 1,
+                    editionDate: currentStory.edition_date,
+                  });
+                }
+
+                // Registrar story_completed tras 6 segundos de permanencia activa
+                dwellTimerRef.current = setTimeout(() => {
+                  if (!completedStoryIds.current.has(currentStory.id)) {
+                    completedStoryIds.current.add(currentStory.id);
+                    logLuminaEvent("story_completed", {
+                      storyId: currentStory.id,
+                      position: index + 1,
+                      editionDate: currentStory.edition_date,
+                    });
+                  }
+                }, 6000);
               }
             }
           }
@@ -168,10 +196,15 @@ export default function Home() {
     const cards = mainElement.querySelectorAll("article");
     cards.forEach((card) => observer.observe(card));
 
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (dwellTimerRef.current) {
+        clearTimeout(dwellTimerRef.current);
+      }
+    };
   }, [mounted, stories]);
 
-  // Vibración táctil discreta al cambiar de historia
+  // Vibración háptica suave al avanzar de tarjeta
   useEffect(() => {
     if (activeIndex > 0 && typeof navigator !== "undefined" && navigator.vibrate) {
       navigator.vibrate(12);
@@ -198,9 +231,15 @@ export default function Home() {
             <span className="text-lg sm:text-xl font-bold tracking-tight text-[var(--heading)] font-mono">
               Lumina<span className="text-primary-DEFAULT">.</span>
             </span>
-            <span className="hidden sm:inline text-xs text-slate-400 font-medium">
-              Cinco avances verificables
-            </span>
+            {isOfflineFallback ? (
+              <span className="inline-flex items-center gap-1 text-[11px] text-amber-500 font-medium">
+                <WifiOff className="w-3 h-3" /> Edición previa (offline)
+              </span>
+            ) : (
+              <span className="hidden sm:inline text-xs text-slate-400 font-medium">
+                Cinco avances verificables
+              </span>
+            )}
           </div>
 
           {/* Selector de Tema */}
