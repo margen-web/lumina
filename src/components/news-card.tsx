@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ExternalLink, Share2, Check, ChevronDown, ChevronUp, ShieldCheck, AlertCircle } from "lucide-react";
+import { ExternalLink, Share2, Check } from "lucide-react";
 import { StoryItem } from "@/lib/supabase";
 import { logLuminaEvent } from "@/lib/analytics";
 
@@ -11,23 +11,29 @@ interface NewsCardProps {
   total: number;
 }
 
-export function NewsCard({ story, index, total }: NewsCardProps) {
-  const [isEvidenceOpen, setIsEvidenceOpen] = useState(false);
-  const [isCopied, setIsCopied] = useState(false);
+// Helpers para formatear la fuente y categoría con estilo limpio
+function getCategoryBadgeClass(category: string): string {
+  const cat = category.toLowerCase();
+  if (cat.includes("ciencia") || cat.includes("salud")) {
+    return "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800";
+  }
+  if (cat.includes("clima") || cat.includes("energía") || cat.includes("ambiente")) {
+    return "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800";
+  }
+  if (cat.includes("tecnología") || cat.includes("innovación")) {
+    return "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800";
+  }
+  if (cat.includes("sociedad") || cat.includes("educación")) {
+    return "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-800";
+  }
+  if (cat.includes("océanos") || cat.includes("biodiversidad") || cat.includes("animales")) {
+    return "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800";
+  }
+  return "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700";
+}
 
-  const handleToggleEvidence = () => {
-    const nextState = !isEvidenceOpen;
-    setIsEvidenceOpen(nextState);
-    if (typeof navigator !== "undefined" && navigator.vibrate) {
-      navigator.vibrate(15);
-    }
-    if (nextState) {
-      logLuminaEvent("evidence_opened", { storyId: story.id, position: index + 1 });
-      logLuminaEvent("story_completed", { storyId: story.id, position: index + 1 });
-    } else {
-      logLuminaEvent("evidence_closed", { storyId: story.id, position: index + 1 });
-    }
-  };
+export function NewsCard({ story, index, total }: NewsCardProps) {
+  const [isCopied, setIsCopied] = useState(false);
 
   const handleSourceClick = () => {
     logLuminaEvent("source_clicked", {
@@ -39,7 +45,7 @@ export function NewsCard({ story, index, total }: NewsCardProps) {
 
   const handleShare = async () => {
     logLuminaEvent("story_shared", { storyId: story.id, position: index + 1, method: "native" });
-    const shareText = `Lumina — Progreso Verificable:\n\n${story.headline}\n\n• Qué ocurrió: ${story.what_changed}\n• Por qué importa: ${story.why_it_matters}\n\nFuente: ${story.primary_source_name} (${story.primary_source_url})\n\n➜ lumina-app-drab.vercel.app`;
+    const shareText = `Lumina (Noticia ${index + 1}/5):\n\n${story.headline}\n\n${story.what_changed}\n\nFuente: ${story.primary_source_name}\n➜ lumina-app-drab.vercel.app`;
     
     if (typeof navigator !== "undefined" && navigator.share) {
       try {
@@ -50,7 +56,7 @@ export function NewsCard({ story, index, total }: NewsCardProps) {
         });
         return;
       } catch {
-        // Fallback a portapapeles si el usuario cancela o falla
+        // Fallback a portapapeles
       }
     }
 
@@ -61,16 +67,21 @@ export function NewsCard({ story, index, total }: NewsCardProps) {
     }
   };
 
+  // Resumen limpio de 2 a 4 frases
+  const summaryText = story.what_changed 
+    ? (story.why_it_matters ? `${story.what_changed} ${story.why_it_matters}` : story.what_changed)
+    : story.evidence || "";
+
   return (
     <article
       data-index={index}
-      className="w-full h-[100dvh] flex flex-col justify-center items-center p-4 sm:p-6 snap-start snap-always relative overflow-hidden"
+      className="w-full h-[100dvh] flex flex-col justify-between items-center px-5 sm:px-8 py-20 sm:py-24 snap-start snap-always relative overflow-hidden"
     >
-      <div className="w-full max-w-md bg-[var(--card)] rounded-3xl p-6 sm:p-7 shadow-lg border border-[var(--border)] flex flex-col gap-4 relative max-h-[88dvh] overflow-y-auto scrollbar-none transition-all">
+      <div className="w-full max-w-lg mx-auto flex flex-col justify-between h-full">
         
-        {/* Cabecera de la tarjeta: Categoría y Posición */}
-        <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
-          <span className="px-3 py-1 rounded-full text-xs font-semibold tracking-wide bg-[var(--subtle)] text-[var(--foreground)]">
+        {/* Parte superior: Categoría y contador */}
+        <div className="flex items-center justify-between pt-2">
+          <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${getCategoryBadgeClass(story.category)}`}>
             {story.category}
           </span>
           <span className="text-xs font-mono font-bold text-slate-400 dark:text-slate-500">
@@ -78,109 +89,53 @@ export function NewsCard({ story, index, total }: NewsCardProps) {
           </span>
         </div>
 
-        {/* CAPA 1: Titular Factual y Bloques Fundamentales */}
-        <div className="flex flex-col gap-3.5">
-          <h2 className="text-xl sm:text-2xl font-extrabold leading-snug tracking-tight text-[var(--heading)]">
+        {/* Cuerpo principal de la noticia: Titular + Resumen claro */}
+        <div className="flex flex-col gap-5 sm:gap-6 my-auto py-4">
+          <h1 className="text-2xl sm:text-3xl font-extrabold leading-[1.2] tracking-tight text-[var(--heading)]">
             {story.headline}
-          </h2>
+          </h1>
 
-          <div className="flex flex-col gap-2.5 text-sm sm:text-base leading-relaxed text-[var(--foreground)]">
-            <div>
-              <span className="font-bold text-[var(--heading)] block text-xs uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">
-                Qué cambió
-              </span>
-              <p className="opacity-95">{story.what_changed}</p>
-            </div>
+          <p className="text-base sm:text-lg leading-relaxed text-slate-600 dark:text-slate-300 font-normal">
+            {summaryText}
+          </p>
 
-            <div>
-              <span className="font-bold text-[var(--heading)] block text-xs uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">
-                Por qué importa
-              </span>
-              <p className="opacity-95">{story.why_it_matters}</p>
-            </div>
+          <div className="text-xs sm:text-sm font-medium text-slate-400 dark:text-slate-500 flex items-center gap-2">
+            <span>{story.primary_source_name}</span>
+            <span>·</span>
+            <span>Hoy</span>
           </div>
         </div>
 
-        {/* CAPA 2: Botón de Apertura de Evidencia y Caveats */}
-        <div className="mt-1 pt-3 border-t border-[var(--border)] flex flex-col gap-3">
-          <button
-            onClick={handleToggleEvidence}
-            className="w-full py-2.5 px-4 rounded-xl bg-[var(--subtle)] hover:bg-slate-200 dark:hover:bg-slate-800 text-xs sm:text-sm font-bold text-[var(--heading)] flex items-center justify-between transition-all cursor-pointer"
-            aria-expanded={isEvidenceOpen}
+        {/* Acciones inferiores: Leer original + Compartir */}
+        <div className="flex items-center justify-between pt-4 border-t border-[var(--border)]">
+          <a
+            href={story.primary_source_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={handleSourceClick}
+            className="inline-flex items-center gap-2 text-sm font-bold text-sky-600 dark:text-sky-400 hover:text-sky-700 dark:hover:text-sky-300 transition-colors group cursor-pointer"
           >
-            <span className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-primary-DEFAULT" />
-              {isEvidenceOpen ? "Ocultar evidencia y límites" : "Ver evidencia y límites"}
-            </span>
-            {isEvidenceOpen ? (
-              <ChevronUp className="w-4 h-4 text-slate-400" />
+            <span>Leer original</span>
+            <ExternalLink className="w-4 h-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+          </a>
+
+          <button
+            onClick={handleShare}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-[var(--subtle)] hover:bg-slate-200 dark:hover:bg-slate-800 text-xs sm:text-sm font-bold text-[var(--heading)] transition-all cursor-pointer"
+            aria-label="Compartir noticia"
+          >
+            {isCopied ? (
+              <>
+                <Check className="w-4 h-4 text-emerald-500" />
+                <span className="text-emerald-600 dark:text-emerald-400">Copiado</span>
+              </>
             ) : (
-              <ChevronDown className="w-4 h-4 text-slate-400" />
+              <>
+                <Share2 className="w-4 h-4 text-slate-500" />
+                <span>Compartir</span>
+              </>
             )}
           </button>
-
-          {/* Bloque desplegable de Evidencia y Límites */}
-          {isEvidenceOpen && (
-            <div className="flex flex-col gap-3.5 p-4 rounded-2xl bg-[var(--subtle)] border border-[var(--border)] text-xs sm:text-sm leading-relaxed animate-in fade-in slide-in-from-top-2 duration-200">
-              {/* Métrica de Evidencia destacada si existe */}
-              {story.evidence_metric && (
-                <div className="flex items-baseline gap-2.5 pb-2 border-b border-[var(--border)]">
-                  <span className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-primary-DEFAULT">
-                    {story.evidence_metric}
-                  </span>
-                  {story.evidence_metric_label && (
-                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                      {story.evidence_metric_label}
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {/* Detalle de la Evidencia */}
-              <div>
-                <div className="flex items-center gap-1.5 font-bold text-xs uppercase tracking-wider text-[var(--heading)] mb-1">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                  Evidencia y Datos
-                </div>
-                <p className="text-slate-600 dark:text-slate-300">{story.evidence}</p>
-              </div>
-
-              {/* Lo que todavía no sabemos (Caveat) */}
-              <div>
-                <div className="flex items-center gap-1.5 font-bold text-xs uppercase tracking-wider text-[var(--heading)] mb-1">
-                  <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
-                  Qué queda pendiente
-                </div>
-                <p className="text-slate-600 dark:text-slate-300">{story.caveat}</p>
-              </div>
-            </div>
-          )}
-
-          {/* Barra inferior: Fuente y Compartir */}
-          <div className="flex items-center justify-between pt-1 text-xs">
-            <a
-              href={story.primary_source_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={handleSourceClick}
-              className="flex items-center gap-1.5 font-medium text-slate-500 dark:text-slate-400 hover:text-[var(--heading)] transition-colors hover:underline"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-              <span>Fuente: {story.primary_source_name}</span>
-            </a>
-
-            <button
-              onClick={handleShare}
-              className="p-2 rounded-full hover:bg-[var(--subtle)] text-slate-400 hover:text-[var(--heading)] transition-colors cursor-pointer"
-              aria-label="Compartir historia"
-            >
-              {isCopied ? (
-                <Check className="w-4 h-4 text-emerald-500" />
-              ) : (
-                <Share2 className="w-4 h-4" />
-              )}
-            </button>
-          </div>
         </div>
 
       </div>

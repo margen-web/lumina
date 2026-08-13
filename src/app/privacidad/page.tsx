@@ -1,82 +1,77 @@
 "use client";
 
-import { Sparkles, ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
 export default function Privacidad() {
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 p-6 md:p-12 flex justify-center">
+    <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] p-6 md:p-12 flex justify-center">
       <div className="max-w-2xl w-full flex flex-col gap-8">
         
         {/* Header */}
-        <header className="flex items-center justify-between pb-6 border-b border-slate-200 dark:border-slate-800">
+        <header className="flex items-center justify-between pb-6 border-b border-[var(--border)]">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-primary-DEFAULT animate-pulse" />
-            <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">Lumina.</span>
+            <span className="w-2.5 h-2.5 rounded-full bg-sky-500 inline-block" />
+            <span className="text-xl font-extrabold tracking-tight text-[var(--heading)]">Lumina</span>
           </div>
           <Link
             href="/"
-            className="flex items-center gap-2 text-sm font-semibold hover:text-primary-dark dark:hover:text-primary-light transition-colors cursor-pointer"
+            className="flex items-center gap-2 text-sm font-semibold text-sky-600 dark:text-sky-400 hover:underline transition-colors cursor-pointer"
           >
-            <ArrowLeft className="w-4 h-4" /> Volver al feed
+            <ArrowLeft className="w-4 h-4" /> Volver
           </Link>
         </header>
 
         {/* Content */}
         <main className="flex flex-col gap-6 text-sm leading-relaxed">
-          <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white mb-2">
-            Aviso Legal y Política de Privacidad
+          <h1 className="text-3xl font-extrabold tracking-tight text-[var(--heading)] mb-2">
+            Privacidad & Metodología
           </h1>
 
-          <p className="text-slate-500 dark:text-slate-400">
-            Última actualización: 27 de junio de 2026
+          <p className="text-slate-500 dark:text-slate-400 text-xs">
+            Lumina Core 0.3 · Actualizado agosto 2026
           </p>
 
           <section className="flex flex-col gap-3">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white">1. Información General (Aviso Legal)</h2>
+            <h2 className="text-base font-bold text-[var(--heading)]">1. Nuestra Filosofía de Privacidad</h2>
             <p>
-              El propietario de esta aplicación web y PWA (&quot;Lumina&quot;) es de carácter particular y no comercial directos. 
-              Para cualquier consulta o incidencia legal, puedes ponerte en contacto a través de la dirección de correo electrónico del creador o en el panel de soporte general.
+              Lumina está diseñada bajo el principio de <strong>cero registros y mínima recopilación</strong>. No necesitas crear una cuenta, proporcionar tu correo ni identificarte para leer las cinco noticias de cada día.
             </p>
           </section>
 
           <section className="flex flex-col gap-3">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white">2. Privacidad y Tratamiento de Datos</h2>
+            <h2 className="text-base font-bold text-[var(--heading)]">2. Datos y Métricas de Uso</h2>
             <p>
-              En Lumina respetamos tu privacidad al máximo. La aplicación está diseñada bajo el principio de 
-              <strong> minimización de datos</strong> y no requiere registro, perfiles de usuario obligatorios, ni introduce identificadores intrusivos.
+              No recolectamos nombres, correos ni datos personales. Con el único fin de saber si la experiencia resulta útil (si se completan las cinco noticias y si el lector regresa en días posteriores), generamos un identificador anónimo de dispositivo guardado localmente en tu navegador.
             </p>
-            <ul className="list-disc pl-5 flex flex-col gap-2">
+            <ul className="list-disc pl-5 flex flex-col gap-2 text-xs text-slate-600 dark:text-slate-400">
               <li>
-                <strong>Datos de Navegación:</strong> No recolectamos nombres, correos, ni direcciones físicas. Las visitas son analizadas de forma completamente anónima e individual (sin utilizar cookies) mediante <em>Vercel Analytics</em> con el único fin de medir el rendimiento de la aplicación y el volumen de visitas.
+                <strong>Almacenamiento Local (Local Storage):</strong> Guardamos únicamente tu preferencia de tema (claro/oscuro), la preferencia de avisos y la confirmación de que la edición de hoy ya ha sido completada para no repetir contenido.
               </li>
               <li>
-                <strong>Almacenamiento Local (Local Storage):</strong> Guardamos ciertos estados temporales de forma privada y local en la memoria de tu propio navegador o móvil (preferencia de sonido, racha de días activos y las noticias a las que has reaccionado). Esta información nunca se sube a nuestros servidores ni se comparte con terceros.
-              </li>
-              <li>
-                <strong>Reacciones Globales:</strong> Cuando reaccionas a una noticia con el icono de Lumina, enviamos de forma anónima una petición a la base de datos (Supabase) para incrementar el contador general de esa tarjeta. En ningún momento vinculamos esa acción a tu persona ni a tu dirección IP en base de datos.
+                <strong>Métricas anónimas:</strong> Registramos eventos de lectura agregados mediante un endpoint seguro con limitación de peticiones. Nunca se asocian a tu identidad personal ni se venden a terceros.
               </li>
             </ul>
           </section>
 
           <section className="flex flex-col gap-3">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white">3. Cookies</h2>
+            <h2 className="text-base font-bold text-[var(--heading)]">3. Cookies</h2>
             <p>
-              Lumina <strong>no utiliza cookies de rastreo ni publicitarias</strong>. Al no usar cookies sujetas al consentimiento de la Directiva ePrivacy/RGPD, no mostramos el clásico banner de cookies, garantizando una interfaz completamente limpia y veloz.
+              Lumina <strong>no utiliza cookies de rastreo publicitario ni cookies de terceros</strong>. Por este motivo no mostramos banners invasivos de consentimiento, garantizando una carga inmediata y limpia.
             </p>
           </section>
 
           <section className="flex flex-col gap-3">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white">4. Propiedad Intelectual y Fuentes</h2>
+            <h2 className="text-base font-bold text-[var(--heading)]">4. Metodología de Fuentes y Enlaces</h2>
             <p>
-              Lumina actúa únicamente como escaparate recopilatorio de noticias y optimismo. Los resúmenes de las noticias se redactan de manera libre y siempre incluyen un botón directo (&quot;Leer original&quot;) para enlazar a la fuente de información original del medio de comunicación correspondiente.
+              Cada noticia en Lumina incluye de forma visible la atribución a su fuente original y un enlace directo (<em>Leer original ↗</em>). Priorizamos fuentes de primer nivel (papers científicos, organismos oficiales, agencias internacionales de noticias e instituciones acreditadas).
             </p>
           </section>
         </main>
 
         {/* Footer */}
-        <footer className="pt-6 border-t border-slate-200 dark:border-slate-800 text-center text-xs text-slate-400 dark:text-slate-600">
-          <p>© {new Date().getFullYear()} Lumina. Diseñado con optimismo y calma.</p>
+        <footer className="pt-6 border-t border-[var(--border)] text-center text-xs text-slate-400">
+          <p>© {new Date().getFullYear()} Lumina. Cinco noticias positivas al día.</p>
         </footer>
 
       </div>

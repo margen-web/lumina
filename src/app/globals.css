@@ -2,15 +2,15 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme {
-  --color-primary-light: #fef08a;
-  --color-primary-DEFAULT: #f59e0b;
-  --color-primary-dark: #d97706;
+  --color-primary-light: #38bdf8;
+  --color-primary-DEFAULT: #0284c7;
+  --color-primary-dark: #0369a1;
 
-  --color-background-light: #fafafa;
-  --color-background-dark: #090d16;
+  --color-background-light: #ffffff;
+  --color-background-dark: #0a0f1d;
 
   --color-card-light: #ffffff;
-  --color-card-dark: #111726;
+  --color-card-dark: #111827;
 
   --color-text-light: #334155;
   --color-text-dark: #94a3b8;
@@ -25,8 +25,10 @@
     --foreground: var(--color-text-light);
     --card: var(--color-card-light);
     --heading: var(--color-text-heading-light);
-    --border: #e2e8f0;
-    --subtle: #f1f5f9;
+    --border: #f1f5f9;
+    --border-strong: #e2e8f0;
+    --subtle: #f8fafc;
+    --accent: #0284c7;
   }
   .dark {
     --background: var(--color-background-dark);
@@ -34,10 +36,13 @@
     --card: var(--color-card-dark);
     --heading: var(--color-text-heading-dark);
     --border: #1e293b;
-    --subtle: #162032;
+    --border-strong: #334155;
+    --subtle: #131d31;
+    --accent: #38bdf8;
   }
   body {
     @apply bg-[var(--background)] text-[var(--foreground)] antialiased transition-colors duration-200;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 }
 
