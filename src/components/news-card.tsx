@@ -68,7 +68,7 @@ function getStoryTheme(category: string): CategoryTheme {
   };
 }
 
-export function NewsCard({ story, index, total }: NewsCardProps) {
+export function NewsCard({ story, index }: NewsCardProps) {
   const [isCopied, setIsCopied] = useState(false);
   const theme = getStoryTheme(story.category);
 
@@ -119,13 +119,10 @@ export function NewsCard({ story, index, total }: NewsCardProps) {
     >
       <div className="w-full max-w-lg mx-auto flex flex-col justify-between h-full relative z-10">
         
-        {/* Cabecera de la noticia: Categoría y contador */}
+        {/* Cabecera de la noticia: Categoría limpia (sin triple contador redundante) */}
         <div className="flex items-center justify-between pt-1">
           <span className={`px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider border transition-colors ${theme.badgeClass}`}>
             {theme.name}
-          </span>
-          <span className="text-xs font-mono font-medium text-slate-400 dark:text-slate-500">
-            {index + 1} de {total}
           </span>
         </div>
 

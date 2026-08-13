@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * TEMPORARY BRAND ASSET:
+ * Símbolo provisional de Apertura / Ventana de Luz.
+ * Este componente es aislado y reemplazable de cara a la definición final del logotipo.
+ */
+
 interface ApertureSymbolProps {
   className?: string;
   size?: number;
@@ -29,7 +35,7 @@ export function ApertureSymbol({ className = "", size = 20, glow = false }: Aper
         {/* Círculo exterior suave */}
         <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5" strokeOpacity="0.25" />
         
-        {/* Núcleo de luz geométrico (Apertura) */}
+        {/* Núcleo geométrico de luz (Apertura) */}
         <path
           d="M12 4.5V9.5M12 14.5V19.5M4.5 12H9.5M14.5 12H19.5"
           stroke="currentColor"

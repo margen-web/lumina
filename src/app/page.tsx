@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { SlidersHorizontal, Loader2 } from "lucide-react";
+import { useEffect, useState, useRef, useCallback } from "react";
+import { SlidersHorizontal, Loader2, Sparkles, RefreshCw } from "lucide-react";
 import { ProgressBar } from "@/components/progress-bar";
 import { NewsCard } from "@/components/news-card";
 import { EndOfFeed } from "@/components/end-of-feed";
@@ -9,107 +9,55 @@ import { SettingsModal } from "@/components/settings-modal";
 import { ApertureSymbol } from "@/components/aperture-symbol";
 import { StoryItem, supabase } from "@/lib/supabase";
 import { logLuminaEvent } from "@/lib/analytics";
-import { getStreakState } from "@/lib/streak";
+import { getStreakState, getTodayDateString, StreakState } from "@/lib/streak";
+import { validateDailyEdition } from "@/lib/edition";
 
-const FALLBACK_STORIES: StoryItem[] = [
-  {
-    id: "story-1",
-    edition_date: "2026-08-13",
-    edition_position: 1,
-    status: "published",
-    category: "Energía & Clima",
-    headline: "Portugal abastece el 71% de su demanda eléctrica con renovables y marca un récord histórico",
-    what_changed: "La red eléctrica nacional alcanzó su máximo histórico anual con 36.7 TWh generados sin combustibles fósiles gracias al empuje hidroeléctrico, eólico y solar coordinado.",
-    why_it_matters: "Demuestra que una economía industrializada moderna puede operar de forma continua dependiendo mayoritariamente de fuentes limpias.",
-    evidence: "Datos oficiales de Redes Energéticas Nacionais (REN).",
-    evidence_metric: "71%",
-    evidence_metric_label: "demanda eléctrica limpia",
-    caveat: "Persisten meses secos con respaldo de gas.",
-    primary_source_name: "Redes Energéticas Nacionais",
-    primary_source_url: "https://www.ren.pt",
-    primary_source_type: "official_data",
-  },
-  {
-    id: "story-2",
-    edition_date: "2026-08-13",
-    edition_position: 2,
-    status: "published",
-    category: "Ciencia & Salud",
-    headline: "La inmunoterapia reduce en un 67% el riesgo de recaída en leucemia linfoblástica juvenil",
-    what_changed: "Un ensayo clínico multicéntrico demuestra que sustituir la quimioterapia intensiva de rescate por blinatumomab triplica la supervivencia libre de enfermedad.",
-    why_it_matters: "Ofrece una vía curativa con menor toxicidad a pacientes que no respondían a los esquemas de tratamiento convencionales.",
-    evidence: "Ensayo fase 3 publicado en The New England Journal of Medicine.",
-    evidence_metric: "-67%",
-    evidence_metric_label: "riesgo de recaída",
-    caveat: "Coste elevado.",
-    primary_source_name: "The New England Journal of Medicine",
-    primary_source_url: "https://www.nejm.org/doi/full/10.1056/NEJMoa2007086",
-    primary_source_type: "scientific_paper",
-  },
-  {
-    id: "story-3",
-    edition_date: "2026-08-13",
-    edition_position: 3,
-    status: "published",
-    category: "Biodiversidad & Océanos",
-    headline: "La mayor reserva marina del Atlántico Sur consolida 690.000 km² de protección absoluta",
-    what_changed: "La zona de exclusión pesquera total de Tristán de Acuña cumple cinco años de veda estricta, acelerando la recuperación de especies en montes submarinos.",
-    why_it_matters: "Constituye el mayor santuario sin pesca industrial del Atlántico y actúa como refugio biológico para tiburones, atunes y aves marinas.",
-    evidence: "Campaña de seguimiento de National Geographic Pristine Seas y BAS.",
-    evidence_metric: "690.000 km²",
-    evidence_metric_label: "océano protegido",
-    caveat: "Vigilancia logística compleja.",
-    primary_source_name: "National Geographic / BAS",
-    primary_source_url: "https://www.nationalgeographic.org/society/projects/pristine-seas/",
-    primary_source_type: "NGO_report",
-  },
-  {
-    id: "story-4",
-    edition_date: "2026-08-13",
-    edition_position: 4,
-    status: "published",
-    category: "Tecnología Útil",
-    headline: "Ingenieros del MIT crean un sistema de desalinización solar que no se satura con sal",
-    what_changed: "El dispositivo flotante utiliza convección capilar para evaporar agua de mar y condensarla sin bombas mecánicas ni acumulación de salmuera tóxica.",
-    why_it_matters: "Permite producir agua potable de bajo coste en comunidades costeras e islas sin requerir conexión a la red eléctrica.",
-    evidence: "Investigación publicada en Nature Communications.",
-    evidence_metric: "5.8 L/m²",
-    evidence_metric_label: "agua potable / hora de sol",
-    caveat: "Ensayos de durabilidad en curso.",
-    primary_source_name: "MIT News / Nature Communications",
-    primary_source_url: "https://news.mit.edu/2023/desalination-system-could-produce-freshwater-cheaper-than-tap-water-0927",
-    primary_source_type: "university",
-  },
-  {
-    id: "story-5",
-    edition_date: "2026-08-13",
-    edition_position: 5,
-    status: "published",
-    category: "Sociedad & Educación",
-    headline: "Las tutorías individualizadas recuperan hasta 1,5 años de retraso lector en primaria",
-    what_changed: "Programas de apoyo pedagógico focalizado de 20 minutos tres veces por semana en escuelas públicas aceleran drásticamente la fluidez lectora infantil.",
-    why_it_matters: "Aprender a leer con soltura a edad temprana es la herramienta más eficaz para prevenir el abandono escolar y romper barreras sociales.",
-    evidence: "Evaluación de impacto del Banco Interamericano de Desarrollo (BID).",
-    evidence_metric: "+1.5 años",
-    evidence_metric_label: "ganancia de aprendizaje",
-    caveat: "Desafío de escala y tutores.",
-    primary_source_name: "Banco Interamericano de Desarrollo",
-    primary_source_url: "https://www.iadb.org/es/investigacion-y-publicaciones/tutorias-remotas-para-el-aprendizaje",
-    primary_source_type: "public_institution",
-  },
-];
+type EditionLoadStatus = "loading" | "ready" | "not_ready" | "error";
 
 export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [stories, setStories] = useState<StoryItem[]>(FALLBACK_STORIES);
-  const [isLoading, setIsLoading] = useState(true);
+  const [stories, setStories] = useState<StoryItem[]>([]);
+  const [editionStatus, setEditionStatus] = useState<EditionLoadStatus>("loading");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAlreadyCompletedToday, setIsAlreadyCompletedToday] = useState(false);
   const [streakCount, setStreakCount] = useState<number>(0);
   
   const viewedStoryIds = useRef<Set<string>>(new Set());
   const mainRef = useRef<HTMLElement>(null);
+
+  const loadDailyEdition = useCallback(async () => {
+    setEditionStatus("loading");
+    const todayMadrid = getTodayDateString();
+
+    try {
+      const { data, error } = await supabase
+        .from("lumina_stories")
+        .select("*")
+        .eq("status", "published")
+        .eq("edition_date", todayMadrid)
+        .order("edition_position", { ascending: true });
+
+      if (error) {
+        console.error("Error cargando edición de hoy:", error);
+        setEditionStatus("error");
+        setStories([]);
+        return;
+      }
+
+      if (validateDailyEdition(data as StoryItem[], todayMadrid)) {
+        setStories(data as StoryItem[]);
+        setEditionStatus("ready");
+      } else {
+        setStories([]);
+        setEditionStatus("not_ready");
+      }
+    } catch (err) {
+      console.error("Fallo de red / Supabase:", err);
+      setEditionStatus("error");
+      setStories([]);
+    }
+  }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -123,31 +71,12 @@ export default function Home() {
       setIsAlreadyCompletedToday(true);
     }
 
-    const fetchStories = async () => {
-      try {
-        const { data, error } = await supabase
-          .from("lumina_stories")
-          .select("*")
-          .eq("status", "published")
-          .order("edition_position", { ascending: true })
-          .limit(5);
-
-        if (!error && data && data.length > 0) {
-          setStories(data as StoryItem[]);
-        }
-      } catch (err) {
-        console.warn("Using offline verified stories:", err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchStories();
-  }, []);
+    loadDailyEdition();
+  }, [loadDailyEdition]);
 
   // IntersectionObserver para registrar la posición activa y story_viewed
   useEffect(() => {
-    if (!mounted || isAlreadyCompletedToday) return;
+    if (!mounted || isAlreadyCompletedToday || editionStatus !== "ready") return;
     const mainElement = mainRef.current;
     if (!mainElement) return;
 
@@ -182,7 +111,7 @@ export default function Home() {
     cards.forEach((card) => observer.observe(card));
 
     return () => observer.disconnect();
-  }, [mounted, stories, isAlreadyCompletedToday]);
+  }, [mounted, stories, isAlreadyCompletedToday, editionStatus]);
 
   // Vibración táctil discreta al cambiar de noticia
   useEffect(() => {
@@ -201,7 +130,11 @@ export default function Home() {
     }, 50);
   };
 
-  if (!mounted || isLoading) {
+  const handleEditionCompleted = (updatedStreak: StreakState) => {
+    setStreakCount(updatedStreak.currentStreak);
+  };
+
+  if (!mounted || editionStatus === "loading") {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-[var(--background)]">
         <Loader2 className="w-6 h-6 animate-spin text-sky-500" />
@@ -237,8 +170,86 @@ export default function Home() {
           </div>
         </header>
 
-        <EndOfFeed onReread={handleReread} isReopen={true} />
+        <EndOfFeed onReread={handleReread} isReopen={true} onEditionCompleted={handleEditionCompleted} />
         <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+      </div>
+    );
+  }
+
+  // ESTADO: LA EDICIÓN DE HOY NO ESTÁ LISTA (Menos o más de 5 historias publicadas para hoy)
+  if (editionStatus === "not_ready") {
+    return (
+      <div className="relative w-full h-[100dvh] flex flex-col justify-between items-center px-6 py-16 bg-[var(--background)] text-[var(--foreground)] animate-noise-to-light">
+        <header className="w-full max-w-lg flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ApertureSymbol size={18} className="text-sky-500" />
+            <span className="text-lg font-bold tracking-tight text-[var(--heading)]">Lumina</span>
+          </div>
+          <button
+            onClick={() => setIsSettingsOpen(true)}
+            className="p-1.5 rounded-full hover:bg-[var(--subtle)] text-slate-400"
+            aria-label="Abrir ajustes"
+          >
+            <SlidersHorizontal className="w-4 h-4" />
+          </button>
+        </header>
+
+        <div className="flex flex-col items-center gap-5 text-center my-auto max-w-xs">
+          <div className="w-14 h-14 rounded-full bg-sky-50 dark:bg-sky-950/40 text-sky-500 flex items-center justify-center border border-sky-100 dark:border-sky-900/60">
+            <Sparkles className="w-6 h-6" />
+          </div>
+          <div className="flex flex-col gap-2">
+            <h2 className="text-2xl font-extrabold text-[var(--heading)]">
+              La edición de hoy todavía no está lista.
+            </h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Vuelve más tarde para leer las cinco noticias seleccionadas de hoy.
+            </p>
+          </div>
+          <button
+            onClick={loadDailyEdition}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold bg-[var(--subtle)] hover:bg-slate-200 dark:hover:bg-slate-800 text-[var(--heading)] transition-all cursor-pointer border border-[var(--border)] mt-2"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Comprobar de nuevo</span>
+          </button>
+        </div>
+
+        <div className="text-[11px] text-slate-400 text-center font-mono">
+          Europe/Madrid · {getTodayDateString()}
+        </div>
+        <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+      </div>
+    );
+  }
+
+  // ESTADO: ERROR DE CONEXIÓN O SUPABASE
+  if (editionStatus === "error") {
+    return (
+      <div className="relative w-full h-[100dvh] flex flex-col justify-between items-center px-6 py-16 bg-[var(--background)] text-[var(--foreground)]">
+        <header className="w-full max-w-lg flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ApertureSymbol size={18} className="text-sky-500" />
+            <span className="text-lg font-bold tracking-tight text-[var(--heading)]">Lumina</span>
+          </div>
+        </header>
+
+        <div className="flex flex-col items-center gap-4 text-center my-auto max-w-xs">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            No se ha podido conectar con la edición de hoy.
+          </p>
+          <button
+            onClick={loadDailyEdition}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold bg-sky-500 hover:bg-sky-600 text-white transition-all cursor-pointer"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Reintentar</span>
+          </button>
+        </div>
+
+        <div className="text-[11px] text-slate-400 text-center font-mono">
+          Lumina Core 0.3.3
+        </div>
       </div>
     );
   }
@@ -292,7 +303,7 @@ export default function Home() {
             total={stories.length}
           />
         ))}
-        <EndOfFeed onReread={handleReread} />
+        <EndOfFeed onReread={handleReread} onEditionCompleted={handleEditionCompleted} />
       </main>
 
       {/* Modal de Ajustes */}

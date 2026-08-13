@@ -9,15 +9,13 @@ import { recordEditionCompleted, getStreakState, StreakState } from "@/lib/strea
 interface EndOfFeedProps {
   onReread?: () => void;
   isReopen?: boolean;
+  onEditionCompleted?: (streak: StreakState) => void;
 }
 
-export function EndOfFeed({ onReread, isReopen }: EndOfFeedProps) {
+export function EndOfFeed({ onReread, isReopen, onEditionCompleted }: EndOfFeedProps) {
   const hasLoggedComplete = useRef(false);
-  const [streakInfo, setStreakInfo] = useState<StreakState | null>(() => {
-    if (typeof window !== "undefined" && isReopen) {
-      return getStreakState();
-    }
-    return null;
+  const [streakInfo, setStreakInfo] = useState<StreakState>(() => {
+    return getStreakState();
   });
   const [isLitAnimated, setIsLitAnimated] = useState(isReopen || false);
 
@@ -30,9 +28,13 @@ export function EndOfFeed({ onReread, isReopen }: EndOfFeedProps) {
         if (entries[0].isIntersecting && !hasLoggedComplete.current) {
           hasLoggedComplete.current = true;
           
-          // Actualizar racha de luz
+          // Actualizar racha de luz y semana
           const updatedStreak = recordEditionCompleted();
           setStreakInfo(updatedStreak);
+
+          if (onEditionCompleted) {
+            onEditionCompleted(updatedStreak);
+          }
 
           // Registrar evento analítico con racha actual
           logLuminaEvent("edition_completed", {
@@ -59,14 +61,11 @@ export function EndOfFeed({ onReread, isReopen }: EndOfFeedProps) {
     if (el) observer.observe(el);
 
     return () => observer.disconnect();
-  }, [isReopen]);
+  }, [isReopen, onEditionCompleted]);
 
-  const streak = streakInfo?.currentStreak || 1;
-  const isNew = streakInfo?.isNewStreak ?? false;
-
-  // Renderizar la semana (7 puntos de luz)
-  const dotCount = 7;
-  const activeDots = Math.min(streak, dotCount);
+  const streak = streakInfo.currentStreak || 1;
+  const isNew = streakInfo.isNewStreak;
+  const weekDays = streakInfo.weekStatus || [];
 
   return (
     <article
@@ -103,32 +102,35 @@ export function EndOfFeed({ onReread, isReopen }: EndOfFeedProps) {
             </p>
           </div>
 
-          {/* Racha de Luz: Señal sutil de constelación semanal */}
+          {/* Racha de Luz: Constelación semanal L M X J V S D */}
           <div className="w-full p-5 rounded-3xl bg-[var(--subtle)] border border-[var(--border)] flex flex-col items-center gap-3.5">
             <span className="text-xs font-bold text-[var(--heading)] tracking-wide">
               {streak > 1
                 ? `${streak} días seguidos ✦`
-                : isNew && streakInfo?.lastCompletedDate
+                : isNew && streakInfo.lastCompletedDate
                 ? "Hoy empieza una nueva racha ✦"
                 : "Primer día completado ✦"}
             </span>
 
-            {/* Fila de 7 puntos de luz de la semana */}
-            <div className="flex items-center gap-2.5 py-0.5">
-              {Array.from({ length: dotCount }).map((_, i) => {
-                const isLit = i < activeDots;
-                const isCurrentToday = i === activeDots - 1;
+            {/* Fila de los 7 días de la semana actual (L M X J V S D) */}
+            <div className="flex items-center justify-between w-full max-w-[240px] px-2 py-1">
+              {weekDays.map((day) => {
+                const isLit = day.isCompleted && isLitAnimated;
                 return (
-                  <div
-                    key={i}
-                    className={`w-2.5 h-2.5 rounded-full transition-all duration-500 ${
-                      isLit && isLitAnimated
-                        ? isCurrentToday
-                          ? "bg-sky-400 scale-125 shadow-[0_0_8px_rgba(56,189,248,0.9)] animate-pulse"
-                          : "bg-sky-500"
-                        : "bg-slate-200 dark:bg-slate-800"
-                    }`}
-                  />
+                  <div key={day.dateString} className="flex flex-col items-center gap-1.5">
+                    <span className="text-[10px] font-mono font-medium text-slate-400 dark:text-slate-500">
+                      {day.dayLabel}
+                    </span>
+                    <div
+                      className={`w-2.5 h-2.5 rounded-full transition-all duration-500 ${
+                        isLit
+                          ? day.isToday
+                            ? "bg-sky-400 scale-125 shadow-[0_0_8px_rgba(56,189,248,0.9)] animate-pulse"
+                            : "bg-sky-500"
+                          : "bg-slate-200 dark:bg-slate-800"
+                      }`}
+                    />
+                  </div>
                 );
               })}
             </div>
@@ -140,8 +142,8 @@ export function EndOfFeed({ onReread, isReopen }: EndOfFeedProps) {
             </p>
           </div>
 
-          {/* Acción discreta para releer */}
-          {onReread && (
+          {/* Botón de releer: ÚNICAMENTE visible cuando isReopen === true */}
+          {isReopen && onReread && (
             <button
               onClick={onReread}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold text-slate-400 hover:text-[var(--heading)] hover:bg-[var(--subtle)] transition-all cursor-pointer"
@@ -157,7 +159,7 @@ export function EndOfFeed({ onReread, isReopen }: EndOfFeedProps) {
           <a href="/privacidad" className="hover:text-[var(--heading)] transition-colors hover:underline">
             Privacidad
           </a>
-          <span className="font-mono text-[10px]">v0.3.1</span>
+          <span className="font-mono text-[10px]">v0.3.3</span>
         </div>
 
       </div>
