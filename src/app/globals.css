@@ -1,51 +1,81 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
+
 @custom-variant dark (&:is(.dark *));
 
 @theme {
+  --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
   --color-primary-light: #38bdf8;
   --color-primary-DEFAULT: #0284c7;
   --color-primary-dark: #0369a1;
 
   --color-background-light: #ffffff;
-  --color-background-dark: #0a0f1d;
+  --color-background-dark: #070a12;
 
   --color-card-light: #ffffff;
-  --color-card-dark: #111827;
+  --color-card-dark: #0f1422;
 
   --color-text-light: #334155;
   --color-text-dark: #94a3b8;
 
-  --color-text-heading-light: #0f172a;
+  --color-text-heading-light: #050811;
   --color-text-heading-dark: #f8fafc;
 }
 
 @layer base {
   :root {
-    --background: var(--color-background-light);
-    --foreground: var(--color-text-light);
-    --card: var(--color-card-light);
-    --heading: var(--color-text-heading-light);
+    --background: #ffffff;
+    --foreground: #334155;
+    --card: #ffffff;
+    --heading: #050811;
     --border: #f1f5f9;
     --border-strong: #e2e8f0;
     --subtle: #f8fafc;
     --accent: #0284c7;
+    --glow-opacity: 0.12;
   }
   .dark {
-    --background: var(--color-background-dark);
-    --foreground: var(--color-text-dark);
-    --card: var(--color-card-dark);
-    --heading: var(--color-text-heading-dark);
-    --border: #1e293b;
-    --border-strong: #334155;
-    --subtle: #131d31;
+    --background: #070a12;
+    --foreground: #94a3b8;
+    --card: #0f1422;
+    --heading: #f8fafc;
+    --border: #182030;
+    --border-strong: #232d42;
+    --subtle: #0f1524;
     --accent: #38bdf8;
+    --glow-opacity: 0.16;
   }
   body {
-    @apply bg-[var(--background)] text-[var(--foreground)] antialiased transition-colors duration-200;
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    @apply bg-[var(--background)] text-[var(--foreground)] antialiased transition-colors duration-300;
+    font-family: var(--font-sans);
+    letter-spacing: -0.015em;
   }
 }
 
+/* Microtransición de Ruido a Luz al abrir */
+@keyframes noiseToLight {
+  0% {
+    opacity: 0;
+    filter: blur(8px);
+    transform: scale(0.985);
+  }
+  60% {
+    filter: blur(2px);
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0px);
+    transform: scale(1);
+  }
+}
+
+.animate-noise-to-light {
+  animation: noiseToLight 420ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Scroll snap utility */
 @utility scrollbar-none {
   -ms-overflow-style: none;
   scrollbar-width: none;

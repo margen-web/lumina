@@ -11,29 +11,66 @@ interface NewsCardProps {
   total: number;
 }
 
-// Helpers para formatear la fuente y categoría con estilo limpio
-function getCategoryBadgeClass(category: string): string {
+interface CategoryTheme {
+  name: string;
+  badgeClass: string;
+  glowColor: string;
+  accentText: string;
+}
+
+function getStoryTheme(category: string): CategoryTheme {
   const cat = category.toLowerCase();
   if (cat.includes("ciencia") || cat.includes("salud")) {
-    return "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800";
+    return {
+      name: category,
+      badgeClass: "text-cyan-700 dark:text-cyan-300 bg-cyan-50 dark:bg-cyan-950/40 border-cyan-200/80 dark:border-cyan-800/60",
+      glowColor: "rgba(6, 182, 212, 0.08)",
+      accentText: "text-cyan-600 dark:text-cyan-400",
+    };
   }
-  if (cat.includes("clima") || cat.includes("energía") || cat.includes("ambiente")) {
-    return "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800";
+  if (cat.includes("clima") || cat.includes("energía") || cat.includes("ambiente") || cat.includes("naturaleza")) {
+    return {
+      name: category,
+      badgeClass: "text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200/80 dark:border-emerald-800/60",
+      glowColor: "rgba(16, 185, 129, 0.08)",
+      accentText: "text-emerald-600 dark:text-emerald-400",
+    };
   }
   if (cat.includes("tecnología") || cat.includes("innovación")) {
-    return "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800";
+    return {
+      name: category,
+      badgeClass: "text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/40 border-sky-200/80 dark:border-sky-800/60",
+      glowColor: "rgba(2, 132, 199, 0.08)",
+      accentText: "text-sky-600 dark:text-sky-400",
+    };
   }
-  if (cat.includes("sociedad") || cat.includes("educación")) {
-    return "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-800";
+  if (cat.includes("sociedad") || cat.includes("educación") || cat.includes("comunidad")) {
+    return {
+      name: category,
+      badgeClass: "text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 border-rose-200/80 dark:border-rose-800/60",
+      glowColor: "rgba(244, 63, 94, 0.08)",
+      accentText: "text-rose-600 dark:text-rose-400",
+    };
   }
   if (cat.includes("océanos") || cat.includes("biodiversidad") || cat.includes("animales")) {
-    return "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800";
+    return {
+      name: category,
+      badgeClass: "text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-950/40 border-violet-200/80 dark:border-violet-800/60",
+      glowColor: "rgba(139, 92, 246, 0.08)",
+      accentText: "text-violet-600 dark:text-violet-400",
+    };
   }
-  return "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700";
+  return {
+    name: category,
+    badgeClass: "text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700",
+    glowColor: "rgba(2, 132, 199, 0.05)",
+    accentText: "text-sky-600 dark:text-sky-400",
+  };
 }
 
 export function NewsCard({ story, index, total }: NewsCardProps) {
   const [isCopied, setIsCopied] = useState(false);
+  const theme = getStoryTheme(story.category);
 
   const handleSourceClick = () => {
     logLuminaEvent("source_clicked", {
@@ -67,7 +104,7 @@ export function NewsCard({ story, index, total }: NewsCardProps) {
     }
   };
 
-  // Resumen limpio de 2 a 4 frases
+  // Resumen humano fluido
   const summaryText = story.what_changed 
     ? (story.why_it_matters ? `${story.what_changed} ${story.why_it_matters}` : story.what_changed)
     : story.evidence || "";
@@ -75,27 +112,30 @@ export function NewsCard({ story, index, total }: NewsCardProps) {
   return (
     <article
       data-index={index}
-      className="w-full h-[100dvh] flex flex-col justify-between items-center px-5 sm:px-8 py-20 sm:py-24 snap-start snap-always relative overflow-hidden"
+      className="w-full h-[100dvh] flex flex-col justify-between items-center px-6 sm:px-10 py-20 sm:py-24 snap-start snap-always relative overflow-hidden select-text"
+      style={{
+        background: `radial-gradient(circle at 50% 30%, ${theme.glowColor} 0%, transparent 70%)`,
+      }}
     >
-      <div className="w-full max-w-lg mx-auto flex flex-col justify-between h-full">
+      <div className="w-full max-w-lg mx-auto flex flex-col justify-between h-full relative z-10">
         
-        {/* Parte superior: Categoría y contador */}
-        <div className="flex items-center justify-between pt-2">
-          <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${getCategoryBadgeClass(story.category)}`}>
-            {story.category}
+        {/* Cabecera de la noticia: Categoría y contador */}
+        <div className="flex items-center justify-between pt-1">
+          <span className={`px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider border transition-colors ${theme.badgeClass}`}>
+            {theme.name}
           </span>
-          <span className="text-xs font-mono font-bold text-slate-400 dark:text-slate-500">
+          <span className="text-xs font-mono font-medium text-slate-400 dark:text-slate-500">
             {index + 1} de {total}
           </span>
         </div>
 
-        {/* Cuerpo principal de la noticia: Titular + Resumen claro */}
-        <div className="flex flex-col gap-5 sm:gap-6 my-auto py-4">
-          <h1 className="text-2xl sm:text-3xl font-extrabold leading-[1.2] tracking-tight text-[var(--heading)]">
+        {/* Cuerpo central: Titular vivo + Resumen humano */}
+        <div className="flex flex-col gap-5 sm:gap-7 my-auto py-2">
+          <h1 className="text-2xl sm:text-[2rem] leading-[1.18] font-extrabold tracking-[-0.025em] text-[var(--heading)]">
             {story.headline}
           </h1>
 
-          <p className="text-base sm:text-lg leading-relaxed text-slate-600 dark:text-slate-300 font-normal">
+          <p className="text-base sm:text-lg leading-[1.65] text-slate-600 dark:text-slate-300 font-normal">
             {summaryText}
           </p>
 
@@ -106,32 +146,32 @@ export function NewsCard({ story, index, total }: NewsCardProps) {
           </div>
         </div>
 
-        {/* Acciones inferiores: Leer original + Compartir */}
+        {/* Acciones: Leer original + Compartir */}
         <div className="flex items-center justify-between pt-4 border-t border-[var(--border)]">
           <a
             href={story.primary_source_url}
             target="_blank"
             rel="noopener noreferrer"
             onClick={handleSourceClick}
-            className="inline-flex items-center gap-2 text-sm font-bold text-sky-600 dark:text-sky-400 hover:text-sky-700 dark:hover:text-sky-300 transition-colors group cursor-pointer"
+            className={`inline-flex items-center gap-1.5 text-sm font-semibold hover:opacity-80 transition-opacity group cursor-pointer ${theme.accentText}`}
           >
             <span>Leer original</span>
-            <ExternalLink className="w-4 h-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+            <ExternalLink className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
           </a>
 
           <button
             onClick={handleShare}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-[var(--subtle)] hover:bg-slate-200 dark:hover:bg-slate-800 text-xs sm:text-sm font-bold text-[var(--heading)] transition-all cursor-pointer"
+            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[var(--subtle)] hover:bg-slate-200 dark:hover:bg-slate-800/80 text-xs font-semibold text-[var(--heading)] transition-all cursor-pointer border border-[var(--border)]"
             aria-label="Compartir noticia"
           >
             {isCopied ? (
               <>
-                <Check className="w-4 h-4 text-emerald-500" />
+                <Check className="w-3.5 h-3.5 text-emerald-500" />
                 <span className="text-emerald-600 dark:text-emerald-400">Copiado</span>
               </>
             ) : (
               <>
-                <Share2 className="w-4 h-4 text-slate-500" />
+                <Share2 className="w-3.5 h-3.5 text-slate-400" />
                 <span>Compartir</span>
               </>
             )}
