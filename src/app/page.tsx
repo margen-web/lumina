@@ -1,14 +1,13 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { SlidersHorizontal, Loader2, Sparkles } from "lucide-react";
+import { SlidersHorizontal, Loader2 } from "lucide-react";
 import { ProgressBar } from "@/components/progress-bar";
 import { NewsCard } from "@/components/news-card";
 import { EndOfFeed } from "@/components/end-of-feed";
 import { SettingsModal } from "@/components/settings-modal";
 import { StoryItem, supabase } from "@/lib/supabase";
 import { logLuminaEvent } from "@/lib/analytics";
-import { getStreakState } from "@/lib/streak";
 
 const FALLBACK_STORIES: StoryItem[] = [
   {
@@ -105,7 +104,6 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAlreadyCompletedToday, setIsAlreadyCompletedToday] = useState(false);
-  const [streakCount, setStreakCount] = useState<number>(0);
   
   const viewedStoryIds = useRef<Set<string>>(new Set());
   const mainRef = useRef<HTMLElement>(null);
@@ -115,10 +113,10 @@ export default function Home() {
     setMounted(true);
     logLuminaEvent("session_started");
 
-    // Comprobar estado de racha y finalización
-    const streakState = getStreakState();
-    setStreakCount(streakState.currentStreak);
-    if (streakState.completedToday) {
+    // Comprobar si el usuario ya completó la edición de hoy
+    const todayStr = new Date().toISOString().split("T")[0];
+    const lastCompleted = localStorage.getItem("lumina_last_completed_edition");
+    if (lastCompleted === todayStr) {
       setIsAlreadyCompletedToday(true);
     }
 
@@ -220,21 +218,13 @@ export default function Home() {
             </span>
           </div>
 
-          <div className="flex items-center gap-3">
-            {streakCount > 0 && (
-              <span className="px-2.5 py-1 rounded-full bg-sky-50 dark:bg-sky-950/50 text-sky-600 dark:text-sky-400 text-xs font-bold border border-sky-100 dark:border-sky-900/50 flex items-center gap-1">
-                <Sparkles className="w-3 h-3 text-sky-500" />
-                <span>{streakCount} {streakCount === 1 ? "día" : "días"}</span>
-              </span>
-            )}
-            <button
-              onClick={() => setIsSettingsOpen(true)}
-              className="p-2 rounded-full hover:bg-[var(--subtle)] text-slate-500 dark:text-slate-400 transition-colors cursor-pointer"
-              aria-label="Abrir ajustes"
-            >
-              <SlidersHorizontal className="w-4 h-4" />
-            </button>
-          </div>
+          <button
+            onClick={() => setIsSettingsOpen(true)}
+            className="p-2 rounded-full hover:bg-[var(--subtle)] text-slate-500 dark:text-slate-400 transition-colors cursor-pointer"
+            aria-label="Abrir ajustes"
+          >
+            <SlidersHorizontal className="w-4 h-4" />
+          </button>
         </header>
 
         <EndOfFeed onReread={handleReread} isReopen={true} />
@@ -246,7 +236,7 @@ export default function Home() {
   return (
     <div className="relative w-full h-[100dvh] flex flex-col justify-between overflow-hidden select-none bg-[var(--background)] text-[var(--foreground)]">
       
-      {/* Header Fijo y Limpio con Racha de Luz */}
+      {/* Header Fijo y Limpio */}
       <header className="fixed top-0 left-0 right-0 z-40 px-5 sm:px-8 py-3.5 flex flex-col gap-2.5 bg-[var(--background)]/85 backdrop-blur-md border-b border-[var(--border)] pointer-events-none">
         <div className="flex items-center justify-between w-full max-w-lg mx-auto pointer-events-auto">
           
@@ -258,14 +248,8 @@ export default function Home() {
             </span>
           </div>
 
-          {/* Racha discreta y Ajustes */}
-          <div className="flex items-center gap-2.5">
-            {streakCount > 0 && (
-              <span className="px-2.5 py-0.5 rounded-full bg-sky-50 dark:bg-sky-950/50 text-sky-600 dark:text-sky-400 text-xs font-bold border border-sky-100 dark:border-sky-900/50 flex items-center gap-1">
-                <Sparkles className="w-3 h-3 text-sky-500" />
-                <span>{streakCount} {streakCount === 1 ? "día" : "días"}</span>
-              </span>
-            )}
+          {/* Ajustes */}
+          <div className="flex items-center gap-2">
             <button
               onClick={() => setIsSettingsOpen(true)}
               className="p-2 rounded-full hover:bg-[var(--subtle)] text-slate-500 dark:text-slate-400 transition-colors cursor-pointer"
